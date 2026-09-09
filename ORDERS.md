@@ -6,6 +6,7 @@ Phone and laptop Store Managers see the **same** orders via the Express API on p
 
 - Directory: `data/orders/`
 - File: `data/orders/orders.json` (array of orders)
+- Writes are atomic (temp + rename) with rolling `*.bak` backups. Corrupt JSON returns **500** (never a silent empty list).
 - JSON files are gitignored; keep the folder with `data/orders/.gitkeep`
 
 **Proxmox / production:** mount a persistent disk or volume at `data/orders/` (or the whole `data/` tree) so orders survive container restarts.

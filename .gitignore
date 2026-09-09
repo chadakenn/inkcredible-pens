@@ -28,12 +28,15 @@ dist-ssr
 .env.*
 !.env.example
 
-# Custom artwork uploads (keep folder via .gitkeep)
+# Uploads (keep folders via .gitkeep; ignore binaries)
 uploads/*
 !uploads/.gitkeep
 !uploads/custom/
 uploads/custom/*
 !uploads/custom/.gitkeep
+!uploads/products/
+uploads/products/*
+!uploads/products/.gitkeep
 
 # Shared orders JSON (keep folder via .gitkeep)
 data/orders/*
@@ -51,3 +54,7 @@ data/admin/*
 data/checkouts/*
 !data/checkouts/.gitkeep
 
+
+# Rolling JSON backups
+*.json.bak
+*.json.*.bak

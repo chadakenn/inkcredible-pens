@@ -26,7 +26,7 @@ import {
   validateCustomArtworkFile,
 } from '../lib/uploadCustomArtwork'
 
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg'
+const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif'
 
 export default function CustomBusinessCards() {
   useDocumentTitle('Custom business cards')
@@ -40,6 +40,7 @@ export default function CustomBusinessCards() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null)
+  const [logoPreviewData, setLogoPreviewData] = useState<string | null>(null)
   const [artworkId, setArtworkId] = useState<string | null>(null)
   const [artworkFileName, setArtworkFileName] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -61,19 +62,30 @@ export default function CustomBusinessCards() {
     setEmailLater(false)
     setNudgeUpload(false)
     setFileName(file.name)
+    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
     const localPreview = URL.createObjectURL(file)
     setPreviewUrl(localPreview)
     setArtworkUrl(null)
     setArtworkId(null)
     setArtworkFileName(null)
+    setLogoPreviewData(null)
+    const dataUrlPromise = new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('read_failed'))
+      reader.readAsDataURL(file)
+    })
     try {
-      const uploaded = await uploadCustomArtwork(file)
+      const [uploaded, dataUrl] = await Promise.all([
+        uploadCustomArtwork(file),
+        dataUrlPromise.catch(() => ''),
+      ])
       setArtworkUrl(uploaded.url)
       setArtworkId(uploaded.id)
       setArtworkFileName(uploaded.fileName)
-      setPreviewUrl(uploaded.url)
-      URL.revokeObjectURL(localPreview)
       setFileName(uploaded.fileName)
+      // Keep blob preview on page; small-ish data URL for cart (admin URL is not public)
+      if (dataUrl && dataUrl.length < 400_000) setLogoPreviewData(dataUrl)
     } catch (err) {
       URL.revokeObjectURL(localPreview)
       setPreviewUrl(null)
@@ -81,6 +93,7 @@ export default function CustomBusinessCards() {
       setArtworkUrl(null)
       setArtworkId(null)
       setArtworkFileName(null)
+      setLogoPreviewData(null)
       setError(
         err instanceof Error
           ? err.message
@@ -123,6 +136,7 @@ export default function CustomBusinessCards() {
       cardPackQty: packQty,
       cardNotes: notes.trim() || undefined,
       fileName: fileName ?? undefined,
+      logoDataUrl: logoPreviewData ?? undefined,
       artworkUrl: artworkUrl ?? undefined,
       artworkId: artworkId ?? undefined,
       artworkFileName: artworkFileName ?? undefined,
@@ -141,7 +155,7 @@ export default function CustomBusinessCards() {
           : `Custom double-sided business cards (${packQty}). File: ${artworkFileName ?? fileName ?? 'artwork'}. Final art approval by email before production.`,
       accent: '#c084fc',
       art: 'sticker',
-      imageUrl: artworkUrl ?? BUSINESS_CARDS_IMAGE,
+      imageUrl: logoPreviewData ?? BUSINESS_CARDS_IMAGE,
       badge: 'Custom',
       custom,
     }

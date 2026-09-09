@@ -14,7 +14,7 @@ if [[ ! -f package.json ]]; then
 fi
 
 # Snapshot sacred paths exist before pull/build
-mkdir -p data/orders data/catalog uploads/custom
+mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
 if [[ -f .env ]]; then
   echo "==> .env present (will not overwrite)"
 else
@@ -30,7 +30,7 @@ else
 fi
 
 # Re-assert sacred dirs after pull
-mkdir -p data/orders data/catalog uploads/custom
+mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
 
 echo "==> Install + build (replaces node_modules + dist only)"
 npm ci
@@ -46,7 +46,7 @@ else
 fi
 
 echo "==> Sacred paths still present:"
-ls -ld data data/orders data/catalog uploads uploads/custom 2>/dev/null || true
+ls -ld data data/orders data/catalog uploads uploads/custom uploads/products 2>/dev/null || true
 [[ -f .env ]] && echo "    .env OK" || echo "    .env MISSING"
 
 echo "==> Done. Spot-check https://YOUR_DOMAIN , Orders, and uploads."

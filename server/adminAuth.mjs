@@ -7,6 +7,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRateLimiter } from './security.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ADMIN_DIR = path.resolve(__dirname, '../data/admin')
@@ -160,17 +161,28 @@ export function requireAdmin(req, res, next) {
  * @param {import('express').Express} app
  */
 export function mountAdminAuth(app) {
-  app.post('/api/admin/login', (req, res) => {
+  const loginLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    name: 'admin-login',
+  })
+
+  app.post('/api/admin/login', loginLimiter, (req, res) => {
+    // Slight delay on every attempt to slow brute force (does not reveal PIN existence)
+    const delayMs = 200 + Math.floor(Math.random() * 200)
     const pin = String(req.body?.pin ?? '').trim()
-    if (!pin || !safeEqualStr(pin, getAdminPin())) {
-      return res.status(401).json({ error: 'invalid_pin' })
-    }
-    const token = signAdminToken({ role: 'admin' })
-    return res.json({
-      token,
-      expiresInMs: TOKEN_TTL_MS,
-      isDefaultPin: isDefaultAdminPin(),
-    })
+    const ok = Boolean(pin) && safeEqualStr(pin, getAdminPin())
+    setTimeout(() => {
+      if (!ok) {
+        return res.status(401).json({ error: 'invalid_pin' })
+      }
+      const token = signAdminToken({ role: 'admin' })
+      return res.json({
+        token,
+        expiresInMs: TOKEN_TTL_MS,
+        isDefaultPin: isDefaultAdminPin(),
+      })
+    }, delayMs)
   })
 
   app.post('/api/admin/change-pin', (req, res) => {

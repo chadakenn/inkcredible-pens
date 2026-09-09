@@ -7,7 +7,7 @@ import { formatThankYouCardsCartMeta } from '../../data/thankYouCards'
 import { formatCanvasCartMeta } from '../../data/canvasPrints'
 import { formatLogoCartMeta } from '../../data/logoStickers'
 import type { CustomLogoMeta } from '../../data/products'
-import { customPreviewSrc } from '../../lib/uploadCustomArtwork'
+import { customPreviewSrc, downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 import {
   ORDER_STATUS_LABEL,
   ordersNewestFirst,
@@ -59,6 +59,47 @@ function itemMetaLine(custom?: CustomLogoMeta): string | null {
   }
   if (custom.freshieScent) return `Scent: ${custom.freshieScent}`
   return null
+}
+
+function AdminArtThumb({
+  preview,
+  artUrl,
+}: {
+  preview?: string
+  artUrl?: string
+}) {
+  const [src, setSrc] = useState(preview || '')
+  useEffect(() => {
+    let revoked: string | null = null
+    let cancelled = false
+    if (preview) {
+      setSrc(preview)
+      return
+    }
+    if (!artUrl) return
+    void fetchAdminArtworkObjectUrl(artUrl)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        revoked = url
+        setSrc(url)
+      })
+      .catch(() => {
+        if (!cancelled) setSrc('')
+      })
+    return () => {
+      cancelled = true
+      if (revoked) URL.revokeObjectURL(revoked)
+    }
+  }, [preview, artUrl])
+  if (!src) return null
+  return (
+    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1">
+      <img src={src} alt="" className="h-full w-full object-contain" />
+    </div>
+  )
 }
 
 function OrderCard({
@@ -153,14 +194,8 @@ function OrderCard({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 flex-1 gap-3">
-                      {preview && (
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1">
-                          <img
-                            src={preview}
-                            alt=""
-                            className="h-full w-full object-contain"
-                          />
-                        </div>
+                      {(preview || artUrl) && (
+                        <AdminArtThumb preview={preview} artUrl={artUrl} />
                       )}
                       <div className="min-w-0">
                         <p className="font-bold text-cream">{item.name}</p>
@@ -186,13 +221,17 @@ function OrderCard({
                           </p>
                         )}
                         {artUrl ? (
-                          <a
-                            href={`${artUrl}?download=1`}
-                            download={downloadName}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void downloadAdminArtwork(artUrl, downloadName).catch((err) => {
+                                window.alert(err instanceof Error ? err.message : 'Download failed')
+                              })
+                            }}
                             className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-xl border border-cyan/40 bg-cyan/10 px-3 text-xs font-extrabold text-cyan transition hover:bg-cyan/20"
                           >
                             <Download className="h-3.5 w-3.5" /> Download print file
-                          </a>
+                          </button>
                         ) : item.custom?.logoComingByEmail ? (
                           <p className="mt-1 text-[11px] font-bold text-lavender">
                             Customer will email artwork

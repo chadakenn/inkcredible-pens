@@ -19,7 +19,7 @@ export interface CustomLogoMeta {
   stickerSizeId?: string
   logoDataUrl?: string
   fileName?: string
-  /** Durable server upload path, e.g. /uploads/custom/... */
+  /** Admin-protected artwork path, e.g. /api/admin/uploads/custom/<uuid>.jpg */
   artworkUrl?: string
   /** Stored filename / upload id */
   artworkId?: string

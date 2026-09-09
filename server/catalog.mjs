@@ -8,12 +8,15 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  renameSync,
-  writeFileSync,
 } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { requireAdmin } from "./adminAuth.mjs"
+import {
+  CorruptJsonError,
+  readJsonFile,
+  writeJsonAtomic,
+} from "./security.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CATALOG_DIR = path.resolve(__dirname, "../data/catalog")
@@ -75,22 +78,24 @@ function ensureCatalogFile() {
 
 function readProducts() {
   ensureCatalogFile()
-  try {
-    const raw = readFileSync(CATALOG_FILE, "utf8")
-    const data = JSON.parse(raw)
-    if (Array.isArray(data)) return data
-    if (data && Array.isArray(data.products)) return data.products
-    return []
-  } catch (err) {
-    console.error("[catalog] read failed", err)
-    return []
-  }
+  const data = readJsonFile(CATALOG_FILE)
+  if (data == null) return []
+  if (Array.isArray(data)) return data
+  if (data && Array.isArray(data.products)) return data.products
+  console.error("[catalog] unexpected JSON shape — refusing empty fallback")
+  throw new CorruptJsonError(CATALOG_FILE, new Error("unexpected_shape"))
 }
 
 function writeAtomic(products) {
-  const tmp = `${CATALOG_FILE}.${process.pid}.${Date.now()}.tmp`
-  writeFileSync(tmp, JSON.stringify(products, null, 2), "utf8")
-  renameSync(tmp, CATALOG_FILE)
+  writeJsonAtomic(CATALOG_FILE, products, { keepBackups: 5 })
+}
+
+function handleCorrupt(res, err) {
+  if (err instanceof CorruptJsonError || err?.code === "corrupt_json") {
+    console.error("[catalog] CORRUPT products.json — returning 500")
+    return res.status(500).json({ error: "corrupt_catalog", path: CATALOG_FILE })
+  }
+  throw err
 }
 
 function validateProductShape(body, { partial = false } = {}) {
@@ -158,7 +163,13 @@ function validateProductShape(body, { partial = false } = {}) {
     if (body.imageUrl == null || body.imageUrl === "") {
       out.imageUrl = undefined
     } else {
-      out.imageUrl = String(body.imageUrl).trim()
+      const url = String(body.imageUrl).trim()
+      // Reject base64 data URLs — use POST /api/uploads/products instead
+      if (/^data:/i.test(url) || url.length > 2048) {
+        errors.push("invalid_imageUrl")
+      } else {
+        out.imageUrl = url
+      }
     }
   }
 
@@ -172,30 +183,42 @@ export function mountCatalog(app) {
   ensureCatalogFile()
 
   app.get("/api/catalog", (_req, res) => {
-    const products = readProducts()
-    return res.json({ products })
+    try {
+      const products = readProducts()
+      return res.json({ products })
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
   })
 
   app.get("/api/catalog/products/:id", (req, res) => {
     const id = String(req.params.id || "")
     if (!id) return res.status(400).json({ error: "invalid_id" })
-    const products = readProducts()
-    const product = products.find((p) => p.id === id)
-    if (!product) return res.status(404).json({ error: "not_found" })
-    return res.json({ product })
+    try {
+      const products = readProducts()
+      const product = products.find((p) => p.id === id)
+      if (!product) return res.status(404).json({ error: "not_found" })
+      return res.json({ product })
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
   })
 
   app.get("/api/catalog/product-price/:id", (req, res) => {
     const id = String(req.params.id || "")
     if (!id) return res.status(400).json({ error: "invalid_id" })
-    const products = readProducts()
-    const product = products.find((p) => p.id === id)
-    if (!product) return res.status(404).json({ error: "not_found" })
-    return res.json({
-      id: product.id,
-      price: product.price,
-      name: product.name,
-    })
+    try {
+      const products = readProducts()
+      const product = products.find((p) => p.id === id)
+      if (!product) return res.status(404).json({ error: "not_found" })
+      return res.json({
+        id: product.id,
+        price: product.price,
+        name: product.name,
+      })
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
   })
 
   app.post("/api/catalog/products", requireAdmin, (req, res) => {
@@ -205,7 +228,12 @@ export function mountCatalog(app) {
       return res.status(400).json({ error: errors[0], errors })
     }
 
-    const products = readProducts()
+    let products
+    try {
+      products = readProducts()
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
     let id =
       typeof body.id === "string" && body.id.trim() ? body.id.trim() : newProductId(out.name)
     if (products.some((p) => p.id === id)) {
@@ -244,7 +272,12 @@ export function mountCatalog(app) {
       return res.status(400).json({ error: "no_updates" })
     }
 
-    const products = readProducts()
+    let products
+    try {
+      products = readProducts()
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
     const idx = products.findIndex((p) => p.id === id)
     if (idx < 0) return res.status(404).json({ error: "not_found" })
 
@@ -264,7 +297,12 @@ export function mountCatalog(app) {
   app.delete("/api/catalog/products/:id", requireAdmin, (req, res) => {
     const id = String(req.params.id || "")
     if (!id) return res.status(400).json({ error: "invalid_id" })
-    const products = readProducts()
+    let products
+    try {
+      products = readProducts()
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
     const next = products.filter((p) => p.id !== id)
     if (next.length === products.length) {
       return res.status(404).json({ error: "not_found" })

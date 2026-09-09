@@ -22,6 +22,11 @@ import {
   readCheckout,
   savePendingCheckout,
 } from './checkouts.mjs'
+import {
+  allowUnsignedWebhook,
+  isProductionHardening,
+  resolveReturnOrigin,
+} from './security.mjs'
 
 const PORT = Number(process.env.PORT) || 4242
 const DEFAULT_ORIGIN =
@@ -65,23 +70,6 @@ function loadWebhookSecret() {
   return undefined
 }
 
-function isHttpOrigin(value) {
-  if (typeof value !== 'string') return false
-  try {
-    const u = new URL(value)
-    return u.protocol === 'http:' || u.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-function resolveReturnOrigin(bodyOrigin) {
-  if (isHttpOrigin(bodyOrigin)) return String(bodyOrigin).replace(/\/$/, '')
-  if (isHttpOrigin(process.env.ORIGIN)) return String(process.env.ORIGIN).replace(/\/$/, '')
-  if (isHttpOrigin(DEFAULT_ORIGIN)) return DEFAULT_ORIGIN.replace(/\/$/, '')
-  return 'http://127.0.0.1:5173'
-}
-
 function truncateMeta(value, max = 500) {
   const s = String(value ?? '')
   if (s.length <= max) return s
@@ -102,18 +90,32 @@ app.post(
     if (!secret) {
       return res.status(503).json({ error: 'missing_stripe_key' })
     }
+
+    // Fail closed: production (or REQUIRE_STRIPE_WEBHOOK / prod ORIGIN) must have a signing secret.
+    if (!webhookSecret) {
+      if (isProductionHardening() || !allowUnsignedWebhook()) {
+        console.error(
+          '[stripe-webhook] REFUSING unsigned webhook — STRIPE_WEBHOOK_SECRET required in production',
+        )
+        return res.status(503).json({ error: 'webhook_secret_required' })
+      }
+    }
+
     const stripe = new Stripe(secret)
     let event
     try {
       if (webhookSecret) {
         const sig = req.headers['stripe-signature']
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret)
-      } else {
-        // Local convenience only — set STRIPE_WEBHOOK_SECRET in real deploys.
+      } else if (allowUnsignedWebhook()) {
+        // Local/dev only — set ALLOW_INSECURE_WEBHOOK=1 intentionally; never in production.
         console.warn(
-          '[stripe-webhook] STRIPE_WEBHOOK_SECRET missing — parsing body without verify',
+          '[stripe-webhook] STRIPE_WEBHOOK_SECRET missing — parsing body without verify (ALLOW_INSECURE_WEBHOOK / local)',
         )
         event = JSON.parse(Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body)
+      } else {
+        console.error('[stripe-webhook] unsigned webhook blocked')
+        return res.status(503).json({ error: 'webhook_secret_required' })
       }
     } catch (err) {
       console.error('[stripe-webhook] verify failed', err)
@@ -133,7 +135,7 @@ app.post(
   },
 )
 
-app.use(express.json({ limit: '1mb' }))
+app.use(express.json({ limit: '2mb' }))
 
 mountAdminAuth(app)
 mountUploads(app)
@@ -145,6 +147,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     stripe: Boolean(secret),
     webhook: Boolean(webhookSecret),
+    productionHardening: isProductionHardening(),
   })
 })
 
@@ -397,8 +400,9 @@ app.post('/api/create-checkout-session', async (req, res) => {
 })
 
 app.listen(PORT, () => {
+  const prod = isProductionHardening()
   console.log(
-    `[stripe-checkout] listening on http://127.0.0.1:${PORT} (ORIGIN=${DEFAULT_ORIGIN}, stripe=${Boolean(secret)}, webhook=${Boolean(webhookSecret)})`,
+    `[stripe-checkout] listening on http://127.0.0.1:${PORT} (ORIGIN=${process.env.ORIGIN || DEFAULT_ORIGIN}, stripe=${Boolean(secret)}, webhook=${Boolean(webhookSecret)}, productionHardening=${prod})`,
   )
   if (!secret) {
     console.warn(
@@ -406,8 +410,14 @@ app.listen(PORT, () => {
     )
   }
   if (!webhookSecret) {
-    console.warn(
-      '[stripe-checkout] STRIPE_WEBHOOK_SECRET not set — use `stripe listen --forward-to localhost:4242/api/stripe/webhook`',
-    )
+    if (prod) {
+      console.error(
+        '[stripe-checkout] FATAL CONFIG: STRIPE_WEBHOOK_SECRET missing under production hardening — webhooks return 503',
+      )
+    } else {
+      console.warn(
+        '[stripe-checkout] STRIPE_WEBHOOK_SECRET not set — use `stripe listen` or set ALLOW_INSECURE_WEBHOOK=1 for local unsigned only',
+      )
+    }
   }
 })

@@ -6,13 +6,11 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
-  readFileSync,
-  renameSync,
   unlinkSync,
-  writeFileSync,
 } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CorruptJsonError, readJsonFile, writeJsonAtomic } from './security.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CHECKOUTS_DIR = path.resolve(__dirname, '../data/checkouts')
@@ -39,20 +37,20 @@ export function savePendingCheckout(checkout) {
     updatedAt: new Date().toISOString(),
   }
   const dest = fileFor(id)
-  const tmp = `${dest}.${process.pid}.${Date.now()}.tmp`
-  writeFileSync(tmp, JSON.stringify(record, null, 2), 'utf8')
-  renameSync(tmp, dest)
+  writeJsonAtomic(dest, record, { keepBackups: 3 })
   return record
 }
 
 export function readCheckout(id) {
   const dest = fileFor(id)
-  if (!existsSync(dest)) return null
   try {
-    return JSON.parse(readFileSync(dest, 'utf8'))
+    return readJsonFile(dest)
   } catch (err) {
-    console.error('[checkouts] read failed', id, err)
-    return null
+    if (err instanceof CorruptJsonError || err?.code === 'corrupt_json') {
+      console.error('[checkouts] CORRUPT checkout file', id, err)
+      throw err
+    }
+    throw err
   }
 }
 
@@ -63,10 +61,11 @@ export function findCheckoutByStripeSession(sessionId) {
     const files = readdirSync(CHECKOUTS_DIR).filter((f) => f.endsWith('.json'))
     for (const f of files) {
       try {
-        const data = JSON.parse(readFileSync(path.join(CHECKOUTS_DIR, f), 'utf8'))
+        const data = readJsonFile(path.join(CHECKOUTS_DIR, f))
         if (data?.stripeSessionId === sid) return data
-      } catch {
-        /* skip */
+      } catch (err) {
+        console.error('[checkouts] CORRUPT while scanning', f, err)
+        /* skip corrupt file during scan */
       }
     }
   } catch (err) {

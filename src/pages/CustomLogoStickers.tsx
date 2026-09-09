@@ -35,7 +35,7 @@ import {
   validateCustomArtworkFile,
 } from '../lib/uploadCustomArtwork'
 
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg'
+const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif'
 
 export default function CustomLogoStickers() {
   useDocumentTitle('Custom logo stickers')
@@ -51,6 +51,7 @@ export default function CustomLogoStickers() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null)
+  const [logoPreviewData, setLogoPreviewData] = useState<string | null>(null)
   const [artworkId, setArtworkId] = useState<string | null>(null)
   const [artworkFileName, setArtworkFileName] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -85,19 +86,30 @@ export default function CustomLogoStickers() {
     setUploading(true)
     setFileName(file.name)
     setNudgeUpload(false)
+    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
     const localPreview = URL.createObjectURL(file)
     setPreviewUrl(localPreview)
     setArtworkUrl(null)
     setArtworkId(null)
     setArtworkFileName(null)
+    setLogoPreviewData(null)
+    const dataUrlPromise = new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => reject(new Error('read_failed'))
+      reader.readAsDataURL(file)
+    })
     try {
-      const uploaded = await uploadCustomArtwork(file)
+      const [uploaded, dataUrl] = await Promise.all([
+        uploadCustomArtwork(file),
+        dataUrlPromise.catch(() => ''),
+      ])
       setArtworkUrl(uploaded.url)
       setArtworkId(uploaded.id)
       setArtworkFileName(uploaded.fileName)
-      setPreviewUrl(uploaded.url)
-      URL.revokeObjectURL(localPreview)
       setFileName(uploaded.fileName)
+      // Keep blob preview on page; small-ish data URL for cart (admin URL is not public)
+      if (dataUrl && dataUrl.length < 400_000) setLogoPreviewData(dataUrl)
     } catch (err) {
       URL.revokeObjectURL(localPreview)
       setPreviewUrl(null)
@@ -105,6 +117,7 @@ export default function CustomLogoStickers() {
       setArtworkUrl(null)
       setArtworkId(null)
       setArtworkFileName(null)
+      setLogoPreviewData(null)
       setError(
         err instanceof Error
           ? err.message
@@ -129,11 +142,13 @@ export default function CustomLogoStickers() {
   }, [])
 
   const clearLogo = () => {
+    if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
     setPreviewUrl(null)
     setFileName(null)
     setArtworkUrl(null)
     setArtworkId(null)
     setArtworkFileName(null)
+    setLogoPreviewData(null)
     setError(null)
     setUploading(false)
   }
@@ -151,6 +166,7 @@ export default function CustomLogoStickers() {
       stickerSize: size.label,
       stickerSizeId: size.id,
       fileName: fileName ?? undefined,
+      logoDataUrl: logoPreviewData ?? undefined,
       artworkUrl: artworkUrl ?? undefined,
       artworkId: artworkId ?? undefined,
       artworkFileName: artworkFileName ?? undefined,
@@ -167,7 +183,7 @@ export default function CustomLogoStickers() {
         : `Custom ${style.label} stickers (${size.label}, ${cut.label}). File: ${artworkFileName ?? fileName ?? 'logo'}. Final art approval by email before production.`,
       accent: style.accent,
       art: 'sticker',
-      imageUrl: artworkUrl ?? undefined,
+      imageUrl: logoPreviewData ?? undefined,
       badge: 'Custom',
       custom,
     }

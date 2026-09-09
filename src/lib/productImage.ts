@@ -3,7 +3,7 @@ const MAX_OUTPUT_BYTES = 1.5 * 1024 * 1024
 const MAX_DIMENSION = 1200
 const OUTPUT_QUALITY = 0.8
 
-const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
+const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 export class ProductImageError extends Error {}
 
@@ -28,18 +28,10 @@ function canvasBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob | nul
   return new Promise((resolve) => canvas.toBlob(resolve, type, OUTPUT_QUALITY))
 }
 
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(new ProductImageError('We could not read that photo. Please try another one.'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-export async function prepareProductImage(file: File): Promise<string> {
-  if (!ALLOWED_TYPES.has(file.type)) {
-    throw new ProductImageError('Please choose a PNG, JPG, or WebP photo.')
+/** Resize/compress a product photo and return a Blob suitable for multipart upload. */
+export async function prepareProductImageBlob(file: File): Promise<{ blob: Blob; mime: string }> {
+  if (!ALLOWED_TYPES.has(file.type) && !/\.(png|jpe?g|webp|gif)$/i.test(file.name)) {
+    throw new ProductImageError('Please choose a PNG, JPG, WebP, or GIF photo.')
   }
   if (file.size > MAX_INPUT_BYTES) {
     throw new ProductImageError('That original photo is too large. Choose one under 20 MB.')
@@ -78,5 +70,17 @@ export async function prepareProductImage(file: File): Promise<string> {
     throw new ProductImageError('Photo is still too large after resizing. Try a smaller one.')
   }
 
-  return blobToDataUrl(output)
+  return { blob: output, mime: output.type || 'image/webp' }
+}
+
+/** @deprecated Prefer prepareProductImageBlob + server upload (no base64 in catalog). */
+export async function prepareProductImage(file: File): Promise<string> {
+  const { blob } = await prepareProductImageBlob(file)
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () =>
+      reject(new ProductImageError('We could not read that photo. Please try another one.'))
+    reader.readAsDataURL(blob)
+  })
 }

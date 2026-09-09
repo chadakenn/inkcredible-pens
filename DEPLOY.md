@@ -13,7 +13,8 @@
 │   ├── admin/            # PIN + session secret (gitignored)
 │   └── checkouts/        # pending Stripe checkouts (gitignored)
 ├── uploads/              # SACRED
-│   └── custom/
+│   ├── custom/           # customer print files (admin-only serve)
+│   └── products/         # public storefront photos
 ├── .env                  # SACRED — never in git
 └── package.json
 ```
@@ -59,8 +60,9 @@ npm run build
 
 ```bash
 STRIPE_SECRET_KEY=sk_test_...   # switch to sk_live_ only when ready
-STRIPE_WEBHOOK_SECRET=whsec_... # Dashboard webhook endpoint signing secret
-ORIGIN=https://YOUR_DOMAIN
+STRIPE_WEBHOOK_SECRET=whsec_... # REQUIRED — missing secret → webhook 503 in production
+ORIGIN=https://inkcrediblepens.org
+NODE_ENV=production
 PORT=4242
 ADMIN_PIN=....                  # change after first login; also stored in data/admin/pin.json
 # ADMIN_SESSION_SECRET=...      # optional; auto-generated under data/admin/ if omitted
@@ -69,7 +71,7 @@ ADMIN_PIN=....                  # change after first login; also stored in data/
 7. Ensure data dirs exist and survive:
 
 ```bash
-mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom
+mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
 # Optional: bind-mount these from a Proxmox volume/dataset
 ```
 

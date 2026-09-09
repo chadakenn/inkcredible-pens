@@ -2,11 +2,17 @@
  * Shared orders persistence (JSON on disk) — mounted on Express (4242).
  * File: /workspace/inkcredible-pens/data/orders/orders.json
  * All HTTP routes require admin auth; webhook uses createPaidOrder().
+ * Writes are atomic + backed up; corrupt JSON fails loudly (no silent []).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { requireAdmin } from './adminAuth.mjs'
+import {
+  CorruptJsonError,
+  readJsonFile,
+  writeJsonAtomic,
+} from './security.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ORDERS_DIR = path.resolve(__dirname, '../data/orders')
@@ -21,21 +27,16 @@ function newOrderId() {
 }
 
 function readOrders() {
-  if (!existsSync(ORDERS_FILE)) return []
-  try {
-    const raw = readFileSync(ORDERS_FILE, 'utf8')
-    const data = JSON.parse(raw)
-    if (Array.isArray(data)) return data
-    if (data && Array.isArray(data.orders)) return data.orders
-    return []
-  } catch (err) {
-    console.error('[orders] read failed', err)
-    return []
-  }
+  const data = readJsonFile(ORDERS_FILE)
+  if (data == null) return []
+  if (Array.isArray(data)) return data
+  if (data && Array.isArray(data.orders)) return data.orders
+  console.error('[orders] unexpected JSON shape — refusing empty fallback')
+  throw new CorruptJsonError(ORDERS_FILE, new Error('unexpected_shape'))
 }
 
 function writeOrders(orders) {
-  writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf8')
+  writeJsonAtomic(ORDERS_FILE, orders, { keepBackups: 5 })
 }
 
 function newestFirst(orders) {
@@ -71,6 +72,14 @@ function normalizeItems(raw) {
     if (row.productId) out.productId = String(row.productId)
     return out
   })
+}
+
+function handleCorrupt(res, err) {
+  if (err instanceof CorruptJsonError || err?.code === 'corrupt_json') {
+    console.error('[orders] CORRUPT orders.json — returning 500')
+    return res.status(500).json({ error: 'corrupt_orders', path: ORDERS_FILE })
+  }
+  throw err
 }
 
 /**
@@ -148,8 +157,12 @@ export function findOrderById(id) {
  */
 export function mountOrders(app) {
   app.get('/api/orders', requireAdmin, (_req, res) => {
-    const orders = newestFirst(readOrders())
-    return res.json({ orders })
+    try {
+      const orders = newestFirst(readOrders())
+      return res.json({ orders })
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
   })
 
   app.post('/api/orders', requireAdmin, (req, res) => {
@@ -164,6 +177,9 @@ export function mountOrders(app) {
         ...(created ? {} : { error: 'duplicate_stripe_session' }),
       })
     } catch (err) {
+      if (err instanceof CorruptJsonError || err?.code === 'corrupt_json') {
+        return handleCorrupt(res, err)
+      }
       const code = err?.code || 'create_failed'
       return res.status(400).json({ error: code })
     }
@@ -188,7 +204,12 @@ export function mountOrders(app) {
       }
     }
 
-    const orders = readOrders()
+    let orders
+    try {
+      orders = readOrders()
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
     const idx = orders.findIndex((o) => o.id === id)
     if (idx < 0) return res.status(404).json({ error: 'not_found' })
 
@@ -236,7 +257,12 @@ export function mountOrders(app) {
   app.delete('/api/orders/:id', requireAdmin, (req, res) => {
     const id = String(req.params.id || '')
     if (!id) return res.status(400).json({ error: 'invalid_id' })
-    const orders = readOrders()
+    let orders
+    try {
+      orders = readOrders()
+    } catch (err) {
+      return handleCorrupt(res, err)
+    }
     const next = orders.filter((o) => o.id !== id)
     if (next.length === orders.length) {
       return res.status(404).json({ error: 'not_found' })

@@ -167,3 +167,38 @@ export async function resetCatalog(): Promise<Product[]> {
   }
   return Array.isArray(data?.products) ? data!.products! : []
 }
+
+export async function uploadProductPhoto(file: Blob, fileName = 'product.webp'): Promise<{
+  url: string
+  id: string
+  mime: string
+  size: number
+}> {
+  const form = new FormData()
+  form.append('file', file, fileName)
+  const res = await fetch('/api/uploads/products', {
+    method: 'POST',
+    headers: adminAuthHeaders(),
+    body: form,
+  })
+  const data = (await parseJson(res)) as {
+    url?: string
+    id?: string
+    mime?: string
+    size?: number
+    error?: string
+  } | null
+  if (!res.ok || !data?.url || !data?.id) {
+    throw new CatalogApiError(
+      data?.error || `upload_failed_${res.status}`,
+      res.status,
+      data?.error || 'upload_failed',
+    )
+  }
+  return {
+    url: data.url,
+    id: data.id,
+    mime: data.mime || 'image/webp',
+    size: data.size || 0,
+  }
+}

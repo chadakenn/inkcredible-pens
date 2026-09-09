@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { ImagePlus, Link2, LoaderCircle, RefreshCw, Trash2, Upload } from 'lucide-react'
-import { prepareProductImage } from '../../lib/productImage'
+import { CatalogApiError, uploadProductPhoto } from '../../lib/catalogApi'
+import { prepareProductImageBlob, ProductImageError } from '../../lib/productImage'
 
 interface ProductPhotoFieldProps {
   value?: string
@@ -17,10 +18,12 @@ export default function ProductPhotoField({
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [photoError, setPhotoError] = useState<string | null>(null)
-  const [linkDraft, setLinkDraft] = useState(value.startsWith('http') ? value : '')
+  const [linkDraft, setLinkDraft] = useState(
+    value.startsWith('http') || value.startsWith('/uploads/') ? value : '',
+  )
 
   useEffect(() => {
-    if (value.startsWith('http')) setLinkDraft(value)
+    if (value.startsWith('http') || value.startsWith('/uploads/')) setLinkDraft(value)
     if (!value) setLinkDraft('')
   }, [value])
 
@@ -29,11 +32,27 @@ export default function ProductPhotoField({
     setBusy(true)
     setPhotoError(null)
     try {
-      const prepared = await prepareProductImage(file)
-      onChange(prepared)
+      const prepared = await prepareProductImageBlob(file)
+      const ext = prepared.mime.includes('jpeg') ? 'jpg' : prepared.mime.includes('png') ? 'png' : 'webp'
+      const uploaded = await uploadProductPhoto(prepared.blob, `product.${ext}`)
+      onChange(uploaded.url)
       setLinkDraft('')
     } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : 'That photo could not be used.')
+      if (error instanceof CatalogApiError) {
+        setPhotoError(
+          error.code === 'unauthorized' || error.status === 401
+            ? 'Unlock Store Manager again, then retry the photo.'
+            : error.code === 'file_too_large'
+              ? 'Photo is too large.'
+              : error.code === 'invalid_type'
+                ? 'Please choose a PNG, JPG, WebP, or GIF.'
+                : 'Photo upload failed. Try again.',
+        )
+      } else if (error instanceof ProductImageError) {
+        setPhotoError(error.message)
+      } else {
+        setPhotoError(error instanceof Error ? error.message : 'That photo could not be used.')
+      }
     } finally {
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -50,6 +69,11 @@ export default function ProductPhotoField({
     const link = linkDraft.trim()
     if (!link) {
       setPhotoError('Paste an image link first.')
+      return
+    }
+    if (link.startsWith('/uploads/products/')) {
+      setPhotoError(null)
+      onChange(link)
       return
     }
     try {
@@ -71,7 +95,7 @@ export default function ProductPhotoField({
         </span>
         <div>
           <h3 className="font-display text-xl text-cream">Product photo</h3>
-          <p className="text-sm text-mute">PNG, JPG, or WebP. We resize it for you.</p>
+          <p className="text-sm text-mute">PNG, JPG, or WebP. Uploaded to the server (not base64).</p>
         </div>
       </div>
 
@@ -131,7 +155,7 @@ export default function ProductPhotoField({
               <Upload className="h-12 w-12 text-cyan" />
             )}
             <span className="font-display text-2xl text-cream">
-              {busy ? 'Getting photo ready…' : 'Choose a product photo'}
+              {busy ? 'Uploading photo…' : 'Choose a product photo'}
             </span>
             <span className="text-base font-bold text-mute">Tap here or drop a photo</span>
           </button>
@@ -141,7 +165,7 @@ export default function ProductPhotoField({
       <input
         ref={inputRef}
         type="file"
-        accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+        accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
         className="sr-only"
         onChange={(event) => void useFile(event.target.files?.[0])}
       />
