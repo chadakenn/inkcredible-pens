@@ -9,6 +9,7 @@ Customer logo / banner / canvas files are stored on disk (not only as base64 in 
 - Directory: `uploads/custom/`
 - Filename: `<uuid>.{jpg|png|webp|gif}` (random UUID; extension from verified type)
 - On Proxmox / production: keep the same relative path, or mount a persistent volume at `uploads/`.
+- Owner: system user **`inkcredible`** (see [DEPLOY.md](./DEPLOY.md)).
 
 Uploaded binaries are gitignored; `uploads/custom/.gitkeep` keeps the folder in git.
 
@@ -17,9 +18,16 @@ Uploaded binaries are gitignored; `uploads/custom/.gitkeep` keeps the folder in 
 - **No SVG** (XSS / polyglot risk).
 - Server verifies **magic bytes**, not just MIME/extension.
 - Max size ~**12MB**; oversize rejected early by multer.
-- Upload POSTs are **rate-limited per IP** (in-memory; single-node).
+- Upload POSTs are **rate-limited per trusted IP** (in-memory; single-node; see [SECURITY.md](./SECURITY.md) trust proxy).
 - **Not** publicly readable: `GET /uploads/custom/:name` returns 401.
 - Store Manager downloads via `GET /api/admin/uploads/custom/:name` (Bearer token). Orders panel uses an authenticated fetch + download button.
+
+### Retention / disk quota
+
+- Startup + daily job deletes **abandoned** custom uploads older than **`UPLOAD_RETENTION_DAYS`** (default **7**) that are not referenced by checkout/order JSON.
+- Pending/completed checkout JSON older than **`CHECKOUT_RETENTION_DAYS`** (default **7**) is removed the same way.
+- Product photos under `uploads/products/` are **not** auto-deleted.
+- **Quota guidance:** size the volume for peak concurrent carts × ~12MB + headroom (often 5–20 GB). Monitor `uploads/custom/` growth after launch.
 
 ### API
 

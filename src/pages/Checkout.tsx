@@ -40,31 +40,64 @@ function PaymentIcons() {
   )
 }
 
+const IS_DEV = import.meta.env.DEV
+
 function OrderSuccessPanel({
   orderId,
   stripePaid,
+  pendingConfirmation,
   onCopy,
   copied,
+  onRefresh,
 }: {
   orderId: string
   stripePaid: boolean
+  pendingConfirmation?: boolean
   onCopy: () => void
   copied: boolean
+  onRefresh?: () => void
 }) {
+  const badge = pendingConfirmation
+    ? 'Payment confirmation pending'
+    : stripePaid
+      ? IS_DEV
+        ? 'Paid via Stripe (test mode)'
+        : 'Paid via Stripe'
+      : IS_DEV
+        ? 'Order confirmed (demo)'
+        : 'Order confirmed'
+  const blurb = pendingConfirmation
+    ? 'Stripe returned you here, but we have not confirmed payment on the server yet. Keep this session code and refresh — do not assume the order is paid.'
+    : stripePaid
+      ? IS_DEV
+        ? 'Stripe test Checkout completed — no live charges with test keys. Keep this code handy if you email us.'
+        : 'Payment confirmed. Keep this code handy if you email us.'
+      : IS_DEV
+        ? 'Demo order only — nothing charged. Keep this code handy if you email us about it.'
+        : 'Keep this code handy if you email us about it.'
+
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-4 py-16 text-center sm:px-6 sm:py-20">
       <div className="animate-fade-up flex w-full flex-col items-center gap-4">
         <LogoMark size="md" />
-        <CheckCircle2 className="h-14 w-14 text-lime drop-shadow-[0_0_20px_rgba(200,245,66,0.35)]" />
-        <p className="rounded-full border border-lime/40 bg-lime/10 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-lime">
-          {stripePaid ? 'Paid via Stripe (test mode)' : 'Order confirmed (demo)'}
+        <CheckCircle2
+          className={`h-14 w-14 drop-shadow-[0_0_20px_rgba(200,245,66,0.35)] ${
+            pendingConfirmation ? 'text-lavender' : 'text-lime'
+          }`}
+        />
+        <p
+          className={`rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-wider ${
+            pendingConfirmation
+              ? 'border-lavender/40 bg-lavender/10 text-lavender'
+              : 'border-lime/40 bg-lime/10 text-lime'
+          }`}
+        >
+          {badge}
         </p>
-        <h1 className="font-display text-3xl sm:text-4xl">Order vibes received</h1>
-        <p className="text-mute">
-          {stripePaid
-            ? 'Stripe test Checkout completed — no live charges with test keys. Keep this code handy if you email us.'
-            : 'Demo order only — nothing charged. Keep this code handy if you email us about it.'}
-        </p>
+        <h1 className="font-display text-3xl sm:text-4xl">
+          {pendingConfirmation ? 'Almost there…' : 'Order vibes received'}
+        </h1>
+        <p className="text-mute">{blurb}</p>
 
         <div className="mt-2 w-full rounded-2xl border border-cyan/30 bg-ink-2 p-5 text-left shadow-[0_0_40px_rgba(34,211,238,0.08)]">
           <p className="text-xs font-extrabold uppercase tracking-wider text-cyan">
@@ -91,6 +124,11 @@ function OrderSuccessPanel({
             </a>{' '}
             with this code if you need help.
           </p>
+          {pendingConfirmation && onRefresh && (
+            <button type="button" onClick={onRefresh} className="btn-primary mt-4 min-h-11 w-full text-sm">
+              Refresh payment status
+            </button>
+          )}
         </div>
 
         <p className="text-sm text-mute">
@@ -131,6 +169,8 @@ export default function Checkout() {
   const [payError, setPayError] = useState<string | null>(null)
   const [canceledBanner, setCanceledBanner] = useState(false)
   const [stripeReady, setStripeReady] = useState<boolean | null>(null)
+  const [pendingConfirmation, setPendingConfirmation] = useState(false)
+  const [pendingSessionLabel, setPendingSessionLabel] = useState<string | null>(null)
   const total = subtotal()
   const shippingEstimate = shippingDollarsForSubtotal(total)
   const freeShip = isFreeShipping(total)
@@ -163,15 +203,17 @@ export default function Checkout() {
   }, [canceledFlag, setSearchParams])
 
   useEffect(() => {
-    if (!successFlag || orderId) return
+    if (!successFlag || orderId || pendingConfirmation) return
 
     let cancelled = false
     let attempts = 0
+    const maxAttempts = 30 // ~45s with backoff
 
-    const finish = (id: string, paid: boolean) => {
+    const finishPaid = (id: string) => {
       if (cancelled) return
       setOrderId(id)
-      setStripePaid(paid)
+      setStripePaid(true)
+      setPendingConfirmation(false)
       setSuccessPending(false)
       clear()
       try {
@@ -182,12 +224,21 @@ export default function Checkout() {
       setSearchParams({}, { replace: true })
     }
 
+    const finishPending = (label: string) => {
+      if (cancelled) return
+      // Do NOT invent a paid order id or clear the cart as paid success
+      setPendingSessionLabel(label)
+      setPendingConfirmation(true)
+      setStripePaid(false)
+      setSuccessPending(false)
+      setOrderId(label)
+    }
+
     setSuccessPending(true)
 
     const poll = async () => {
       if (!sessionId) {
-        // No session id — cannot look up server order
-        finish(`pending-${Date.now().toString(36)}`, true)
+        finishPending('missing-session')
         return
       }
       try {
@@ -195,33 +246,37 @@ export default function Checkout() {
         const data = (await res.json().catch(() => ({}))) as {
           orderId?: string | null
           status?: string
+          paymentConfirmed?: boolean
           error?: string
         }
         if (cancelled) return
-        if (res.ok && data.orderId) {
-          finish(data.orderId, true)
+        if (res.ok && data.paymentConfirmed && data.orderId) {
+          finishPaid(data.orderId)
           return
         }
-        // Webhook may lag — retry a few times
+        if (res.ok && data.orderId && data.status === 'paid') {
+          finishPaid(data.orderId)
+          return
+        }
         attempts += 1
-        if (attempts < 12) {
+        if (attempts < maxAttempts) {
+          const delay = attempts < 10 ? 1000 : 2000
           window.setTimeout(() => {
             void poll()
-          }, 1000)
+          }, delay)
           return
         }
-        // Timed out waiting for webhook — still clear cart, show session-based code
-        finish(`stripe-${sessionId}`, true)
+        finishPending(sessionId)
       } catch (err) {
         console.warn('[checkout] session lookup failed', err)
         attempts += 1
-        if (!cancelled && attempts < 12) {
+        if (!cancelled && attempts < maxAttempts) {
           window.setTimeout(() => {
             void poll()
-          }, 1000)
+          }, 1500)
           return
         }
-        if (!cancelled) finish(sessionId ? `stripe-${sessionId}` : `stripe-${Date.now().toString(36)}`, true)
+        if (!cancelled) finishPending(sessionId || 'unknown-session')
       }
     }
 
@@ -231,7 +286,7 @@ export default function Checkout() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on success return
-  }, [successFlag, sessionId, orderId])
+  }, [successFlag, sessionId, orderId, pendingConfirmation])
 
   const contactValid = useMemo(() => {
     return (
@@ -267,12 +322,24 @@ export default function Checkout() {
 
   const onDemoSubmit = (e: FormEvent) => {
     e.preventDefault()
+    if (!IS_DEV) return
     void (async () => {
       const order = await buildLocalOrder()
       setStripePaid(false)
       setOrderId(order.id)
       clear()
     })()
+  }
+
+  const refreshPendingPayment = () => {
+    if (!pendingSessionLabel || !pendingSessionLabel.startsWith('cs_')) return
+    setOrderId(null)
+    setPendingConfirmation(false)
+    setSuccessPending(true)
+    setSearchParams(
+      { success: '1', session_id: pendingSessionLabel },
+      { replace: true },
+    )
   }
 
   const onPayWithStripe = async () => {
@@ -364,8 +431,10 @@ export default function Checkout() {
       <OrderSuccessPanel
         orderId={orderId}
         stripePaid={stripePaid}
+        pendingConfirmation={pendingConfirmation}
         onCopy={copyOrderId}
         copied={copied}
+        onRefresh={pendingConfirmation ? refreshPendingPayment : undefined}
       />
     )
   }
@@ -399,10 +468,14 @@ export default function Checkout() {
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_0.9fr]">
       <div>
         <h1 className="font-display text-3xl sm:text-4xl">Checkout</h1>
-        <p className="mt-1 text-sm text-mute">
-          Stripe <span className="font-bold text-cyan">test mode</span> — no live charges until you use
-          live keys. See <code className="text-cream">STRIPE.md</code>.
-        </p>
+        {IS_DEV ? (
+          <p className="mt-1 text-sm text-mute">
+            Stripe <span className="font-bold text-cyan">test mode</span> — no live charges until you use
+            live keys. See <code className="text-cream">STRIPE.md</code>.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-mute">Secure checkout powered by Stripe.</p>
+        )}
 
         {canceledBanner && (
           <div
@@ -413,7 +486,7 @@ export default function Checkout() {
           </div>
         )}
 
-        {stripeReady === false && (
+        {IS_DEV && stripeReady === false && (
           <div className="mt-4 rounded-xl border border-lavender/40 bg-lavender/10 px-4 py-3 text-sm text-cream">
             Stripe server key not detected. Run{' '}
             <code className="text-cyan">export STRIPE_SECRET_KEY=sk_test_...</code> then{' '}
@@ -486,15 +559,18 @@ export default function Checkout() {
             <div className="rounded-xl border border-cyan/30 bg-ink px-4 py-4">
               <p className="text-sm font-bold text-cream">Pay with Stripe Checkout</p>
               <p className="mt-1 text-xs text-mute">
-                You&apos;ll be redirected to Stripe&apos;s hosted page (test mode). Card fields live
-                there — not on this site.
+                {IS_DEV
+                  ? "You'll be redirected to Stripe's hosted page (test mode). Card fields live there — not on this site."
+                  : "You'll be redirected to Stripe's secure hosted page. Card fields live there — not on this site."}
               </p>
               <div className="mt-3 flex items-start gap-2">
                 <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan" />
                 <div className="space-y-2">
-                  <p className="text-xs text-mute">
-                    Test card: 4242 4242 4242 4242 · any future expiry · any CVC
-                  </p>
+                  {IS_DEV && (
+                    <p className="text-xs text-mute">
+                      Test card: 4242 4242 4242 4242 · any future expiry · any CVC
+                    </p>
+                  )}
                   <PaymentIcons />
                 </div>
               </div>
@@ -521,9 +597,11 @@ export default function Checkout() {
                 <>Pay with Stripe · ${grandTotal.toFixed(2)}</>
               )}
             </button>
-            <button type="submit" className="btn-ghost min-h-11 w-full sm:w-auto">
-              Save demo order (no charge)
-            </button>
+            {IS_DEV && (
+              <button type="submit" className="btn-ghost min-h-11 w-full sm:w-auto">
+                Save demo order (no charge)
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -649,7 +727,9 @@ export default function Checkout() {
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-ink/60 px-3 py-2.5">
           <Lock className="h-3.5 w-3.5 shrink-0 text-cyan" />
           <p className="text-[11px] leading-snug text-mute">
-            Test mode via Stripe Checkout — no live charges until live keys are configured.
+            {IS_DEV
+              ? 'Test mode via Stripe Checkout — no live charges until live keys are configured.'
+              : 'Payments are processed securely by Stripe. Your card details never touch this site.'}
           </p>
         </div>
       </aside>

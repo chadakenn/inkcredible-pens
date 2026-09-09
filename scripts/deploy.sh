@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Run on the Proxmox guest from the app root (e.g. /opt/inkcredible-pens).
 # Sacred (never delete/replace these): data/  uploads/  .env
+# App runs as system user `inkcredible` — keep data/uploads owned by that user.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
+
+APP_USER="${INKCREDIBLE_USER:-inkcredible}"
+APP_GROUP="${INKCREDIBLE_GROUP:-inkcredible}"
 
 echo "==> App root: $ROOT"
 
@@ -13,8 +17,24 @@ if [[ ! -f package.json ]]; then
   exit 1
 fi
 
+ensure_sacred_dirs() {
+  mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
+  if id "$APP_USER" >/dev/null 2>&1; then
+    chown -R "$APP_USER:$APP_GROUP" data uploads 2>/dev/null || \
+      sudo chown -R "$APP_USER:$APP_GROUP" data uploads
+    chmod 750 data data/orders data/catalog data/admin data/checkouts uploads/custom 2>/dev/null || true
+    chmod 755 uploads uploads/products 2>/dev/null || true
+    if [[ -f .env ]]; then
+      chown "$APP_USER:$APP_GROUP" .env 2>/dev/null || sudo chown "$APP_USER:$APP_GROUP" .env || true
+      chmod 640 .env 2>/dev/null || true
+    fi
+  else
+    echo "==> WARNING: user '$APP_USER' not found — create it before production (see DEPLOY.md)"
+  fi
+}
+
 # Snapshot sacred paths exist before pull/build
-mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
+ensure_sacred_dirs
 if [[ -f .env ]]; then
   echo "==> .env present (will not overwrite)"
 else
@@ -29,12 +49,22 @@ else
   echo "    (no git repo — skipped pull)"
 fi
 
-# Re-assert sacred dirs after pull
-mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
+# Re-assert sacred dirs after pull (ownership so first order/upload does not EACCES)
+ensure_sacred_dirs
+
+run_as_app() {
+  if [[ "$(id -un)" == "$APP_USER" ]]; then
+    "$@"
+  elif id "$APP_USER" >/dev/null 2>&1; then
+    sudo -u "$APP_USER" "$@"
+  else
+    "$@"
+  fi
+}
 
 echo "==> Install + build (replaces node_modules + dist only)"
-npm ci
-npm run build
+run_as_app npm ci
+run_as_app npm run build
 
 echo "==> Restart API"
 if systemctl list-unit-files inkcredible.service >/dev/null 2>&1 && \
@@ -46,7 +76,7 @@ else
 fi
 
 echo "==> Sacred paths still present:"
-ls -ld data data/orders data/catalog uploads uploads/custom uploads/products 2>/dev/null || true
+ls -ld data data/orders data/catalog data/admin data/checkouts uploads uploads/custom uploads/products 2>/dev/null || true
 [[ -f .env ]] && echo "    .env OK" || echo "    .env MISSING"
 
 echo "==> Done. Spot-check https://YOUR_DOMAIN , Orders, and uploads."

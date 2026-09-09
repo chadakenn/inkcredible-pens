@@ -13,7 +13,7 @@ export STRIPE_WEBHOOK_SECRET=whsec_...   # required for real deploys / NODE_ENV=
 npm run stripe:server
 ```
 
-Server listens on port **4242**. Vite proxies `/api` → `http://127.0.0.1:4242`.
+Server listens on **`127.0.0.1:4242`** only (not all interfaces). Vite proxies `/api` → `http://127.0.0.1:4242`.
 
 3. In another terminal: `npm run dev` (port 5173), open Checkout, fill contact/shipping, click **Pay with Stripe**.
 
@@ -40,7 +40,7 @@ If `NODE_ENV=production`, `REQUIRE_STRIPE_WEBHOOK=1`, or `ORIGIN` is production 
 
 Local/dev without a secret: unsigned parse may still work for convenience (loud warning). Prefer `stripe listen` + secret, or set `ALLOW_INSECURE_WEBHOOK=1` to make the intent explicit. That flag does **not** unlock unsigned parse under production hardening.
 
-Without a verified webhook, the success page may show a session-based code while waiting; Store Manager will not see a paid order until the event is delivered.
+If the webhook is delayed, `GET /api/checkout/session/:id` may confirm `payment_status=paid` via the Stripe API and fulfill the pending checkout safely. The success page shows **“Payment confirmation pending”** (not Paid) until the server returns a real `orderId` — it never invents `stripe-${sessionId}` / `pending-*` as paid success, and does not clear the cart as paid until confirmed.
 
 ### Return URLs
 
@@ -58,7 +58,7 @@ Set `ORIGIN=https://inkcrediblepens.org` in production. Client `returnOrigin` is
 - Do **not** commit real keys. Prefer env vars; if you use a `.env` file, keep it gitignored.
 - Client sends `productId` + `quantity` + optional `config` (custom options). **Server ignores client unit prices.**
 - Shipping: $8 under $35 merchandise, free at $35+ (same as shop UI).
-- Without `STRIPE_SECRET_KEY`, Checkout still works via **Save demo order (no charge)** (local only unless admin-authenticated).
+- Without `STRIPE_SECRET_KEY`, Checkout cannot charge. **Save demo order (no charge)** and Stripe test-card hints appear in **development builds only** (`import.meta.env.DEV`) — production builds show normal checkout UX only.
 - Health check: `GET http://127.0.0.1:4242/api/health` → `{ ok, stripe, webhook, productionHardening }`.
 - Success lookup: `GET /api/checkout/session/:id` → order id / status only (no full PII).
 
@@ -72,4 +72,4 @@ See [ORDERS.md](./ORDERS.md) and [SECURITY.md](./SECURITY.md). Orders API requir
 
 ## Production deploy
 
-See [DEPLOY.md](./DEPLOY.md) — set `ORIGIN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and admin env vars before live Stripe.
+See [DEPLOY.md](./DEPLOY.md) — set `ORIGIN`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, strong `ADMIN_PIN` (not `1234`), and `TRUST_PROXY` before live Stripe.

@@ -92,6 +92,45 @@ export function allowUnsignedWebhook() {
   return true
 }
 
+/**
+ * Configure Express trust proxy so req.ip is the client IP after Cloudflare/Caddy.
+ * Recommended: TRUST_PROXY=1 (one hop: CF Tunnel → Node, or Caddy → Node).
+ * Set TRUST_PROXY=2 if Cloudflare → Caddy → Node (two reverse-proxy hops).
+ * Never leave unset behind a proxy — rate limits would key on 127.0.0.1 for everyone.
+ */
+export function configureTrustProxy(app) {
+  const raw = process.env.TRUST_PROXY
+  if (raw === undefined || raw === '') {
+    // Default: one hop when production hardening is on (typical CF Tunnel / Caddy).
+    if (isProductionHardening()) {
+      app.set('trust proxy', 1)
+      console.log('[security] trust proxy = 1 (production default; set TRUST_PROXY to override)')
+    }
+    return
+  }
+  if (raw === 'true' || raw === '1') {
+    app.set('trust proxy', 1)
+    return
+  }
+  if (raw === 'false' || raw === '0') {
+    app.set('trust proxy', false)
+    return
+  }
+  const n = Number(raw)
+  if (Number.isFinite(n) && n >= 0) {
+    app.set('trust proxy', n)
+    return
+  }
+  // Allow Express subnet / named settings (e.g. "loopback")
+  app.set('trust proxy', raw)
+}
+
+/** Client IP after trust proxy — never raw first X-Forwarded-For entry. */
+export function clientIp(req) {
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown'
+  return String(ip)
+}
+
 /** Simple in-memory sliding window rate limiter (single-node / Proxmox). */
 export function createRateLimiter({ windowMs, max, name = 'rate' }) {
   /** @type {Map<string, number[]>} */
@@ -108,13 +147,7 @@ export function createRateLimiter({ windowMs, max, name = 'rate' }) {
   return function rateLimit(req, res, next) {
     const now = Date.now()
     if (hits.size > 5000) prune(now)
-    const ip =
-      (typeof req.headers['x-forwarded-for'] === 'string'
-        ? req.headers['x-forwarded-for'].split(',')[0].trim()
-        : null) ||
-      req.ip ||
-      req.socket?.remoteAddress ||
-      'unknown'
+    const ip = clientIp(req)
     const times = (hits.get(ip) || []).filter((t) => now - t < windowMs)
     if (times.length >= max) {
       const retrySec = Math.ceil((windowMs - (now - times[0])) / 1000)
@@ -125,6 +158,50 @@ export function createRateLimiter({ windowMs, max, name = 'rate' }) {
     times.push(now)
     hits.set(ip, times)
     return next()
+  }
+}
+
+/** Cart abuse caps for public checkout. */
+export const CART_LIMITS = {
+  maxLines: 30,
+  maxQuantityPerLine: 99,
+  maxStringFieldLen: 500,
+  maxNotesLen: 500,
+  maxDimension: 1000,
+}
+
+/**
+ * Reject oversized / abusive cart payloads before pricing.
+ * @param {unknown[]} items
+ */
+export function assertCartWithinLimits(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw Object.assign(new Error('empty_cart'), { code: 'empty_cart' })
+  }
+  if (items.length > CART_LIMITS.maxLines) {
+    throw Object.assign(new Error('cart_too_many_lines'), { code: 'cart_too_many_lines' })
+  }
+  for (const raw of items) {
+    const row = raw && typeof raw === 'object' ? raw : {}
+    const qty = Math.round(Number(row.quantity ?? row.qty) || 1)
+    if (qty < 1 || qty > CART_LIMITS.maxQuantityPerLine) {
+      throw Object.assign(new Error('quantity_out_of_range'), { code: 'quantity_out_of_range' })
+    }
+    const config = row.config ?? row.custom ?? null
+    if (config && typeof config === 'object') {
+      for (const [k, v] of Object.entries(config)) {
+        if (typeof v === 'string' && v.length > CART_LIMITS.maxStringFieldLen) {
+          throw Object.assign(new Error(`field_too_long:${k}`), { code: 'field_too_long' })
+        }
+        if (
+          (k === 'bannerWidthFt' || k === 'bannerHeightFt' || k === 'canvasWidthIn' || k === 'canvasHeightIn') &&
+          Number.isFinite(Number(v)) &&
+          Math.abs(Number(v)) > CART_LIMITS.maxDimension
+        ) {
+          throw Object.assign(new Error(`dimension_too_large:${k}`), { code: 'dimension_too_large' })
+        }
+      }
+    }
   }
 }
 

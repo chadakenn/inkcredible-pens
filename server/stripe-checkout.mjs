@@ -9,13 +9,14 @@ import cors from 'cors'
 import express from 'express'
 import Stripe from 'stripe'
 import { readFileSync, existsSync } from 'node:fs'
-import { mountUploads } from './uploads.mjs'
+import { mountUploads, startRetentionJobs } from './uploads.mjs'
 import { mountOrders, createPaidOrder, findOrderByStripeSession } from './orders.mjs'
 import { mountCatalog } from './catalog.mjs'
-import { mountAdminAuth } from './adminAuth.mjs'
+import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { priceCart } from './pricing.mjs'
 import {
   attachStripeSession,
+  cleanupAbandonedCheckouts,
   findCheckoutByStripeSession,
   markCheckoutCompleted,
   newCheckoutId,
@@ -24,6 +25,9 @@ import {
 } from './checkouts.mjs'
 import {
   allowUnsignedWebhook,
+  assertCartWithinLimits,
+  configureTrustProxy,
+  createRateLimiter,
   isProductionHardening,
   resolveReturnOrigin,
 } from './security.mjs'
@@ -80,6 +84,7 @@ const secret = loadSecret()
 const webhookSecret = loadWebhookSecret()
 
 const app = express()
+configureTrustProxy(app)
 app.use(cors({ origin: true }))
 
 // Stripe webhook MUST receive the raw body for signature verification.
@@ -154,7 +159,7 @@ app.get('/api/health', (_req, res) => {
 /**
  * Public-ish success lookup: order number + status only (no full PII dump).
  */
-app.get('/api/checkout/session/:id', (req, res) => {
+app.get('/api/checkout/session/:id', async (req, res) => {
   const id = String(req.params.id || '')
   if (!id.startsWith('cs_')) {
     return res.status(400).json({ error: 'invalid_session_id' })
@@ -168,21 +173,71 @@ app.get('/api/checkout/session/:id', (req, res) => {
       orderId: order.id,
       orderStatus: order.status,
       total: order.total,
+      paymentConfirmed: true,
     })
+  }
+
+  // If webhook lagged: confirm payment_status=paid via Stripe API and fulfill safely.
+  if (secret) {
+    try {
+      const stripe = new Stripe(secret)
+      const session = await stripe.checkout.sessions.retrieve(id)
+      if (session.payment_status === 'paid') {
+        try {
+          const fulfilled = fulfillCheckoutSession(session)
+          return res.json({
+            sessionId: id,
+            status: 'paid',
+            orderId: fulfilled.id,
+            orderStatus: fulfilled.status,
+            total: fulfilled.total,
+            paymentConfirmed: true,
+            confirmedVia: 'stripe_api',
+          })
+        } catch (err) {
+          // Pending checkout missing or race — still do not invent a paid order id
+          console.error('[checkout-session] fulfill after Stripe confirm failed', err)
+          return res.json({
+            sessionId: id,
+            status: 'pending_confirmation',
+            orderId: null,
+            paymentConfirmed: false,
+            stripePaymentStatus: session.payment_status,
+            message: 'Payment seen at Stripe; order not ready yet. Refresh shortly.',
+          })
+        }
+      }
+      return res.json({
+        sessionId: id,
+        status: 'pending_confirmation',
+        orderId: null,
+        paymentConfirmed: false,
+        stripePaymentStatus: session.payment_status,
+      })
+    } catch (err) {
+      console.error('[checkout-session] stripe retrieve failed', err)
+    }
   }
 
   const pending = findCheckoutByStripeSession(id)
   if (pending) {
+    const paid = pending.status === 'completed' && pending.orderId
     return res.json({
       sessionId: id,
-      status: pending.status === 'completed' ? 'paid' : 'pending',
+      status: paid ? 'paid' : 'pending_confirmation',
       orderId: pending.orderId ?? null,
-      orderStatus: pending.status === 'completed' ? 'new' : 'pending',
+      orderStatus: paid ? 'new' : 'pending',
       checkoutId: pending.id,
+      paymentConfirmed: Boolean(paid),
     })
   }
 
-  return res.status(404).json({ error: 'not_found', sessionId: id, status: 'unknown' })
+  return res.status(404).json({
+    error: 'not_found',
+    sessionId: id,
+    status: 'unknown',
+    paymentConfirmed: false,
+  })
 })
 
 /** @deprecated Prefer GET /api/checkout/session/:id — kept for debugging only. */
@@ -277,7 +332,13 @@ function fulfillCheckoutSession(session) {
   return order
 }
 
-app.post('/api/create-checkout-session', async (req, res) => {
+const checkoutCreateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  name: 'create-checkout',
+})
+
+app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res) => {
   if (!secret) {
     return res.status(503).json({ error: 'missing_stripe_key' })
   }
@@ -295,6 +356,13 @@ app.post('/api/create-checkout-session', async (req, res) => {
 
   if (!email || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'invalid_body' })
+  }
+
+  try {
+    assertCartWithinLimits(items)
+  } catch (err) {
+    const code = err?.code || 'invalid_cart'
+    return res.status(400).json({ error: code, message: err instanceof Error ? err.message : code })
   }
 
   const origin = resolveReturnOrigin(returnOrigin)
@@ -399,10 +467,13 @@ app.post('/api/create-checkout-session', async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
+assertAdminPinSafeToBoot()
+
+const BIND_HOST = '127.0.0.1'
+app.listen(PORT, BIND_HOST, () => {
   const prod = isProductionHardening()
   console.log(
-    `[stripe-checkout] listening on http://127.0.0.1:${PORT} (ORIGIN=${process.env.ORIGIN || DEFAULT_ORIGIN}, stripe=${Boolean(secret)}, webhook=${Boolean(webhookSecret)}, productionHardening=${prod})`,
+    `[stripe-checkout] listening on http://${BIND_HOST}:${PORT} (bound ${BIND_HOST} only — reverse proxy/tunnel is the external face; ORIGIN=${process.env.ORIGIN || DEFAULT_ORIGIN}, stripe=${Boolean(secret)}, webhook=${Boolean(webhookSecret)}, productionHardening=${prod}, trustProxy=${app.get('trust proxy')})`,
   )
   if (!secret) {
     console.warn(
@@ -420,4 +491,5 @@ app.listen(PORT, () => {
       )
     }
   }
+  startRetentionJobs({ cleanupCheckouts: cleanupAbandonedCheckouts })
 })

@@ -7,15 +7,15 @@
 ├── dist/                 # vite build (replaceable)
 ├── server/               # Express API (replaceable)
 ├── scripts/deploy.sh
-├── data/                 # SACRED — persistent volume
+├── data/                 # SACRED — persistent volume (owner: inkcredible)
 │   ├── orders/
 │   ├── catalog/          # server-side product catalog (products.json)
-│   ├── admin/            # PIN + session secret (gitignored)
+│   ├── admin/            # PIN + session secret (gitignored; mode 750)
 │   └── checkouts/        # pending Stripe checkouts (gitignored)
-├── uploads/              # SACRED
+├── uploads/              # SACRED (owner: inkcredible)
 │   ├── custom/           # customer print files (admin-only serve)
 │   └── products/         # public storefront photos
-├── .env                  # SACRED — never in git
+├── .env                  # SACRED — never in git (mode 640, group inkcredible)
 └── package.json
 ```
 
@@ -32,50 +32,73 @@ Product catalog is **server JSON** under `data/catalog/` (not browser localStora
 5. **Protected admin APIs** — ✅ PIN login + Bearer token on orders + catalog mutations (see [SECURITY.md](./SECURITY.md))  
 6. **PostgreSQL** — only if/when JSON/SQLite outgrows the store  
 
-Stripe hardening: ✅ Express accepts product IDs/options → loads **server** prices → pending checkout → Stripe session → **webhook** creates paid order in `data/orders/`. Browser never has final say on price. See [STRIPE.md](./STRIPE.md).
+Stripe hardening: ✅ Express accepts product IDs/options → loads **server** prices → pending checkout → Stripe session → **webhook** (or Stripe API confirm) creates paid order in `data/orders/`. Browser never has final say on price. See [STRIPE.md](./STRIPE.md).
 
 ---
 
 ## A. One-time: Proxmox guest
 
 1. Create an **LXC or VM** (Debian/Ubuntu 22.04+ is fine). Give it a static LAN IP.
-2. Install Node 20+:
+2. Install **Node 24 LTS** (deploy standard; `package.json` engines require `>=22.12` for Vite 8):
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
 apt-get install -y nodejs git
+node -v   # expect v24.x
 ```
 
-3. Create an app user and directory, e.g. `/opt/inkcredible-pens`.
-4. Clone or copy the project there (git remote recommended so updates are `git pull`).
+3. Create a dedicated **`inkcredible`** system user/group and app directory:
+
+```bash
+groupadd --system inkcredible
+useradd --system --gid inkcredible --home-dir /opt/inkcredible-pens \
+  --shell /usr/sbin/nologin inkcredible
+mkdir -p /opt/inkcredible-pens
+chown inkcredible:inkcredible /opt/inkcredible-pens
+```
+
+4. Clone or copy the project there as that user (or clone as root then `chown -R inkcredible:inkcredible`).
 5. Install deps and build:
 
 ```bash
 cd /opt/inkcredible-pens
-npm ci
-npm run build
+sudo -u inkcredible npm ci
+sudo -u inkcredible npm run build
 ```
 
 6. Create `/opt/inkcredible-pens/.env` (never commit this):
 
 ```bash
-STRIPE_SECRET_KEY=sk_test_...   # switch to sk_live_ only when ready
+STRIPE_SECRET_KEY=sk_live_...   # or sk_test_ until ready
 STRIPE_WEBHOOK_SECRET=whsec_... # REQUIRED — missing secret → webhook 503 in production
 ORIGIN=https://inkcrediblepens.org
 NODE_ENV=production
 PORT=4242
-ADMIN_PIN=....                  # change after first login; also stored in data/admin/pin.json
+TRUST_PROXY=1                   # CF Tunnel or Caddy → Node; use 2 if CF → Caddy → Node
+ADMIN_PIN=....                  # REQUIRED strong PIN — NOT 1234 (boot refuses default)
 # ADMIN_SESSION_SECRET=...      # optional; auto-generated under data/admin/ if omitted
+# UPLOAD_RETENTION_DAYS=7
+# CHECKOUT_RETENTION_DAYS=7
 ```
 
-7. Ensure data dirs exist and survive:
+```bash
+chown inkcredible:inkcredible /opt/inkcredible-pens/.env
+chmod 640 /opt/inkcredible-pens/.env
+```
+
+7. Ensure data dirs exist with correct ownership (systemd runs as `inkcredible` — mismatched `www-data` causes EACCES on first order/upload):
 
 ```bash
 mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
+chown -R inkcredible:inkcredible data uploads
+chmod 750 data data/orders data/catalog data/admin data/checkouts uploads/custom
+chmod 755 uploads uploads/products   # products may be read via the app; still owned by inkcredible
 # Optional: bind-mount these from a Proxmox volume/dataset
 ```
 
-8. Run the API under **systemd** (example unit below) so it restarts on reboot.
+**Disk quota guidance:** customer artwork under `uploads/custom/` can grow. Plan volume size for peak concurrent carts × ~12MB + headroom (e.g. 5–20 GB). Retention jobs delete abandoned uploads / checkout JSON older than 7 days by default.
+
+8. Run the API under **systemd** as **`inkcredible`** (example unit below).
 9. Put a reverse proxy in front (Caddy or nginx) on the guest **or** use Cloudflare Tunnel — see section C.
 
 ### Example systemd unit
@@ -89,11 +112,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=www-data
+User=inkcredible
+Group=inkcredible
 WorkingDirectory=/opt/inkcredible-pens
 EnvironmentFile=/opt/inkcredible-pens/.env
 ExecStart=/usr/bin/node server/stripe-checkout.mjs
 Restart=on-failure
+# Node binds 127.0.0.1 only — proxy/tunnel is the public face
 
 [Install]
 WantedBy=multi-user.target
@@ -102,6 +127,13 @@ WantedBy=multi-user.target
 ```bash
 systemctl daemon-reload
 systemctl enable --now inkcredible
+```
+
+Confirm listen address:
+
+```bash
+ss -ltnp | grep 4242
+# expect 127.0.0.1:4242 — not 0.0.0.0
 ```
 
 ---
@@ -114,7 +146,9 @@ systemctl enable --now inkcredible
 - `https://YOUR_DOMAIN/api/*` → `http://127.0.0.1:4242`
 - `https://YOUR_DOMAIN/uploads/*` → `http://127.0.0.1:4242` (or alias to disk)
 
-**Option 2 — Cloudflare Tunnel** from the LXC to Cloudflare (no open ports on your router). Point the tunnel public hostname to `http://127.0.0.1:80` (Caddy) or directly to the Node stack if you add static serving later.
+Forward the real client IP (Caddy does this by default with `reverse_proxy`). Set `TRUST_PROXY=1` on Node.
+
+**Option 2 — Cloudflare Tunnel** from the LXC to Cloudflare (no open ports on your router). Point the tunnel public hostname to `http://127.0.0.1:80` (Caddy) or directly to `http://127.0.0.1:4242` if you terminate TLS at Cloudflare and proxy API+static appropriately. With Tunnel → Node, keep `TRUST_PROXY=1`.
 
 SPA note: configure the web server so unknown paths fall back to `index.html` (React Router).
 
@@ -129,9 +163,10 @@ SPA note: configure the web server so unknown paths fall back to `index.html` (R
 
 ```bash
 ORIGIN=https://YOUR_DOMAIN
+TRUST_PROXY=1   # or 2 if Cloudflare orange-cloud → Caddy → Node
 ```
 
-and restart `inkcredible` so Stripe success/cancel URLs use the real host (not `127.0.0.1` or the old trycloudflare URL).
+and restart `inkcredible` so Stripe success/cancel URLs use the real host and rate limits key on real client IPs (not `127.0.0.1`).
 
 5. In Stripe Dashboard → Settings / Branding / Customer emails as you like; for live mode, switch keys only when ready.
 
@@ -146,12 +181,12 @@ cd /opt/inkcredible-pens
 ./scripts/deploy.sh
 ```
 
-Or manually:
+Or manually (as a user that can `sudo -u inkcredible`):
 
 ```bash
 git pull
-npm ci
-npm run build
+sudo -u inkcredible npm ci
+sudo -u inkcredible npm run build
 systemctl restart inkcredible
 # reload caddy/nginx if config changed
 ```
@@ -163,16 +198,19 @@ Confirm:
 - Store Manager Orders still shows old orders (`data/orders/` intact)
 - Shop / Store Manager products come from `data/catalog/products.json` (see CATALOG.md)
 - Artwork downloads still work (`uploads/custom/` intact)
+- `data/` + `uploads/` still owned by `inkcredible`
 
 ---
 
 ## E. Pre-launch checklist
 
-- [ ] Change Store Manager access code (no longer demo `1234`)
+- [ ] Strong Store Manager PIN (not `1234`) — production boot refuses default
 - [ ] `ORIGIN` = production HTTPS URL
+- [ ] `TRUST_PROXY` matches proxy hop count
 - [ ] Stripe **test** works end-to-end on the real domain
 - [ ] Persistent mounts for `data/orders` + `data/catalog` + `uploads/custom`
-- [ ] systemd enabled
+- [ ] systemd `User=inkcredible` + correct dir ownership
+- [ ] Node listens on `127.0.0.1` only
 - [ ] Cloudflare SSL + DNS correct
 - [ ] Only then: Stripe **live** keys
 

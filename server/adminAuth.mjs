@@ -1,13 +1,15 @@
 /**
  * Server-side admin PIN + HMAC session tokens.
- * PIN: ADMIN_PIN env (default 1234) or data/admin/pin.json after Change PIN.
+ * PIN: ADMIN_PIN env or data/admin/pin.json after Change PIN.
+ * Production hardening: refuse missing / default 1234 PIN at boot.
+ * Dev may default to 1234 with a loud warning.
  * Session secret: ADMIN_SESSION_SECRET env or durable file in data/admin/.
  */
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRateLimiter } from './security.mjs'
+import { createRateLimiter, isProductionHardening as _isProductionHardening } from './security.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ADMIN_DIR = path.resolve(__dirname, '../data/admin')
@@ -26,7 +28,13 @@ function safeEqualStr(a, b) {
   return timingSafeEqual(ba, bb)
 }
 
-export function getAdminPin() {
+/**
+ * Resolve effective admin PIN.
+ * Order: persisted pin.json → ADMIN_PIN env → (dev only) default 1234.
+ * @param {{ allowDefault?: boolean }} [opts]
+ */
+export function getAdminPin(opts = {}) {
+  const allowDefault = opts.allowDefault !== false
   try {
     if (existsSync(PIN_FILE)) {
       const data = JSON.parse(readFileSync(PIN_FILE, 'utf8'))
@@ -41,11 +49,66 @@ export function getAdminPin() {
   if (typeof fromEnv === 'string' && fromEnv.trim().length >= 4) {
     return fromEnv.trim()
   }
-  return DEFAULT_PIN
+  if (allowDefault) return DEFAULT_PIN
+  return null
 }
 
 export function isDefaultAdminPin() {
-  return getAdminPin() === DEFAULT_PIN
+  const pin = getAdminPin({ allowDefault: true })
+  return pin === DEFAULT_PIN
+}
+
+/**
+ * Production: refuse to boot if PIN missing or still the default 1234.
+ * Dev: allow 1234 with a loud warning.
+ * Call before app.listen.
+ */
+export function assertAdminPinSafeToBoot() {
+  const persisted = (() => {
+    try {
+      if (existsSync(PIN_FILE)) {
+        const data = JSON.parse(readFileSync(PIN_FILE, 'utf8'))
+        if (typeof data?.pin === 'string' && data.pin.trim().length >= 4) {
+          return data.pin.trim()
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return null
+  })()
+  const fromEnv =
+    typeof process.env.ADMIN_PIN === 'string' && process.env.ADMIN_PIN.trim().length >= 4
+      ? process.env.ADMIN_PIN.trim()
+      : null
+  const effective = persisted || fromEnv
+
+  if (_isProductionHardening()) {
+    if (!effective) {
+      console.error(
+        '[adminAuth] FATAL: ADMIN_PIN missing under production hardening. Set a strong ADMIN_PIN in .env (not 1234).',
+      )
+      process.exit(1)
+    }
+    if (effective === DEFAULT_PIN) {
+      console.error(
+        '[adminAuth] FATAL: ADMIN_PIN is the default 1234 under production hardening. Set a strong PIN (or Change PIN so data/admin/pin.json is not 1234).',
+      )
+      process.exit(1)
+    }
+    if (effective.length < 6) {
+      console.warn(
+        '[adminAuth] WARNING: ADMIN_PIN is shorter than 6 characters — prefer a longer PIN in production.',
+      )
+    }
+    return
+  }
+
+  if (!effective || effective === DEFAULT_PIN) {
+    console.warn(
+      '[adminAuth] WARNING: using default admin PIN 1234 — fine for local/dev only. Production will refuse to start with this PIN.',
+    )
+  }
 }
 
 export function setAdminPin(newPin) {
@@ -166,6 +229,11 @@ export function mountAdminAuth(app) {
     max: 5,
     name: 'admin-login',
   })
+  const changePinLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    name: 'admin-change-pin',
+  })
 
   app.post('/api/admin/login', loginLimiter, (req, res) => {
     // Slight delay on every attempt to slow brute force (does not reveal PIN existence)
@@ -185,20 +253,16 @@ export function mountAdminAuth(app) {
     }, delayMs)
   })
 
-  app.post('/api/admin/change-pin', (req, res) => {
+  // Requires authenticated admin Bearer session — current PIN alone is not enough.
+  app.post('/api/admin/change-pin', changePinLimiter, requireAdmin, (req, res) => {
     const currentPin = String(req.body?.currentPin ?? '').trim()
     const newPin = String(req.body?.newPin ?? '').trim()
-    const token = extractBearer(req)
-    const sessionOk = token ? Boolean(verifyAdminToken(token)) : false
 
-    if (!sessionOk && !safeEqualStr(currentPin, getAdminPin())) {
+    if (!currentPin || !safeEqualStr(currentPin, getAdminPin())) {
       return res.status(401).json({ error: 'invalid_pin' })
     }
-    if (sessionOk && currentPin && !safeEqualStr(currentPin, getAdminPin())) {
-      return res.status(401).json({ error: 'invalid_pin' })
-    }
-    if (!sessionOk && !currentPin) {
-      return res.status(401).json({ error: 'unauthorized' })
+    if (newPin === DEFAULT_PIN) {
+      return res.status(400).json({ error: 'pin_is_default' })
     }
     try {
       setAdminPin(newPin)
