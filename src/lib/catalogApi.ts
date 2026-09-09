@@ -1,3 +1,4 @@
+import { adminAuthHeaders } from './adminAuth'
 import type { Category, Product } from '../data/products'
 
 export type CatalogSyncState = 'idle' | 'loading' | 'synced' | 'error'
@@ -96,7 +97,7 @@ export interface CreateProductBody {
 export async function createProduct(body: CreateProductBody): Promise<Product> {
   const res = await fetch('/api/catalog/products', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
   const data = (await parseJson(res)) as { product?: Product; error?: string } | null
@@ -118,7 +119,7 @@ export async function patchProduct(
 ): Promise<Product> {
   const res = await fetch(`/api/catalog/products/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
   const data = (await parseJson(res)) as { product?: Product; error?: string } | null
@@ -135,6 +136,7 @@ export async function patchProduct(
 export async function deleteProduct(id: string): Promise<void> {
   const res = await fetch(`/api/catalog/products/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: adminAuthHeaders(),
   })
   if (res.status === 404) return
   if (!res.ok) {
@@ -148,7 +150,10 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 export async function resetCatalog(): Promise<Product[]> {
-  const res = await fetch('/api/catalog/reset', { method: 'POST' })
+  const res = await fetch('/api/catalog/reset', {
+    method: 'POST',
+    headers: adminAuthHeaders(),
+  })
   const data = (await parseJson(res)) as {
     products?: Product[]
     error?: string

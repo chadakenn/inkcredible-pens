@@ -1,3 +1,4 @@
+import { adminAuthHeaders } from './adminAuth'
 import type { Order, OrderStatus } from '../store/orders'
 
 export type OrdersSyncState = 'idle' | 'loading' | 'synced' | 'error'
@@ -25,7 +26,7 @@ async function parseJson(res: Response): Promise<unknown> {
 }
 
 export async function fetchOrders(): Promise<Order[]> {
-  const res = await fetch('/api/orders')
+  const res = await fetch('/api/orders', { headers: adminAuthHeaders() })
   const data = (await parseJson(res)) as { orders?: Order[]; error?: string } | null
   if (!res.ok) {
     throw new OrdersApiError(
@@ -51,7 +52,7 @@ export interface CreateOrderBody {
 export async function createOrder(body: CreateOrderBody): Promise<Order> {
   const res = await fetch('/api/orders', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
   const data = (await parseJson(res)) as {
@@ -85,7 +86,7 @@ export async function patchOrder(
 ): Promise<Order> {
   const res = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   })
   const data = (await parseJson(res)) as { order?: Order; error?: string } | null
@@ -109,6 +110,7 @@ export async function updateOrderStatus(
 export async function deleteOrder(id: string): Promise<void> {
   const res = await fetch(`/api/orders/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: adminAuthHeaders(),
   })
   if (res.status === 404) return
   if (!res.ok) {

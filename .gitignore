@@ -42,3 +42,12 @@ data/orders/*
 # Shared product catalog JSON (keep folder via .gitkeep)
 data/catalog/*
 !data/catalog/.gitkeep
+
+# Admin secrets / changed PIN (keep folder via .gitkeep)
+data/admin/*
+!data/admin/.gitkeep
+
+# Pending Stripe checkouts (keep folder via .gitkeep)
+data/checkouts/*
+!data/checkouts/.gitkeep
+

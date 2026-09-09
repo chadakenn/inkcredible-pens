@@ -19,10 +19,10 @@ import {
 import type { Category } from '../data/products'
 import {
   DEMO_PIN,
-  isDefaultAdminPin,
+  changeAdminPin,
+  fetchAdminSession,
+  loginAdmin,
   readAdminUnlocked,
-  verifyAdminPin,
-  writeAdminPin,
   writeAdminUnlocked,
 } from '../lib/adminAuth'
 import { useCart } from '../store/cart'
@@ -145,8 +145,28 @@ export default function Admin() {
 
 
   useEffect(() => {
-    setUnlocked(readAdminUnlocked())
-    setUsingDefaultPin(isDefaultAdminPin())
+    let cancelled = false
+    ;(async () => {
+      if (!readAdminUnlocked()) {
+        if (!cancelled) {
+          setUnlocked(false)
+          setUsingDefaultPin(true)
+        }
+        return
+      }
+      const session = await fetchAdminSession()
+      if (cancelled) return
+      if (session.ok) {
+        setUnlocked(true)
+        setUsingDefaultPin(session.isDefaultPin)
+      } else {
+        setUnlocked(false)
+        setUsingDefaultPin(true)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const setTab = (next: AdminTab) => {
@@ -154,15 +174,17 @@ export default function Admin() {
   }
 
   const unlock = () => {
-    if (verifyAdminPin(pin)) {
-      writeAdminUnlocked(true)
-      setUnlocked(true)
-      setUsingDefaultPin(isDefaultAdminPin())
-      setPinError(false)
-      setPin('')
-    } else {
-      setPinError(true)
-    }
+    void (async () => {
+      try {
+        const result = await loginAdmin(pin)
+        setUnlocked(true)
+        setUsingDefaultPin(result.isDefaultPin)
+        setPinError(false)
+        setPin('')
+      } catch {
+        setPinError(true)
+      }
+    })()
   }
 
   const resetPinForm = () => {
@@ -178,10 +200,6 @@ export default function Admin() {
     const current = currentPinInput.trim()
     const next = newPinInput.trim()
     const confirm = confirmPinInput.trim()
-    if (!verifyAdminPin(current)) {
-      setPinChangeError('Current code is incorrect.')
-      return
-    }
     if (next.length < 4) {
       setPinChangeError('New code must be at least 4 characters.')
       return
@@ -190,16 +208,24 @@ export default function Admin() {
       setPinChangeError('New code and confirmation do not match.')
       return
     }
-    try {
-      writeAdminPin(next)
-    } catch {
-      setPinChangeError('Could not save the new code. Try again.')
-      return
-    }
-    setUsingDefaultPin(isDefaultAdminPin())
-    resetPinForm()
-    setShowChangePin(false)
-    showToast('Access code updated')
+    void (async () => {
+      try {
+        const result = await changeAdminPin(current, next)
+        setUsingDefaultPin(result.isDefaultPin)
+        resetPinForm()
+        setShowChangePin(false)
+        showToast('Access code updated')
+      } catch (err) {
+        const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : ''
+        if (code === 'invalid_pin' || code === 'unauthorized') {
+          setPinChangeError('Current code is incorrect.')
+        } else if (code === 'pin_too_short') {
+          setPinChangeError('New code must be at least 4 characters.')
+        } else {
+          setPinChangeError('Could not save the new code. Try again.')
+        }
+      }
+    })()
   }
 
   const lock = () => {

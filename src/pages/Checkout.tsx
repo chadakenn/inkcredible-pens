@@ -117,9 +117,9 @@ export default function Checkout() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { items, subtotal, clear } = useCart()
   const placeOrder = useOrders((s) => s.placeOrder)
-  const placeOrderFromStripe = useOrders((s) => s.placeOrderFromStripe)
   const [orderId, setOrderId] = useState<string | null>(null)
   const [stripePaid, setStripePaid] = useState(false)
+  const [successPending, setSuccessPending] = useState(false)
   const [copied, setCopied] = useState(false)
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
@@ -131,7 +131,6 @@ export default function Checkout() {
   const [payError, setPayError] = useState<string | null>(null)
   const [canceledBanner, setCanceledBanner] = useState(false)
   const [stripeReady, setStripeReady] = useState<boolean | null>(null)
-  const [cartHydrated, setCartHydrated] = useState(() => useCart.persist.hasHydrated())
   const total = subtotal()
   const shippingEstimate = shippingDollarsForSubtotal(total)
   const freeShip = isFreeShipping(total)
@@ -157,12 +156,6 @@ export default function Checkout() {
   }, [])
 
   useEffect(() => {
-    const unsub = useCart.persist.onFinishHydration(() => setCartHydrated(true))
-    if (useCart.persist.hasHydrated()) setCartHydrated(true)
-    return unsub
-  }, [])
-
-  useEffect(() => {
     if (canceledFlag) {
       setCanceledBanner(true)
       setSearchParams({}, { replace: true })
@@ -170,248 +163,75 @@ export default function Checkout() {
   }, [canceledFlag, setSearchParams])
 
   useEffect(() => {
-    if (!successFlag || orderId || !cartHydrated) return
+    if (!successFlag || orderId) return
 
     let cancelled = false
+    let attempts = 0
 
-    type Draft = {
-      email: string
-      fullName: string
-      address: string
-      city: string
-      state: string
-      zip: string
-      cartSnapshot?: { name: string; price: number; qty: number; custom?: import('../data/products').CustomLogoMeta }[]
-    }
-
-    let draft: Draft = {
-      email: email.trim(),
-      fullName: fullName.trim(),
-      address: address.trim(),
-      city: city.trim(),
-      state: state.trim(),
-      zip: zip.trim(),
-    }
-
-    try {
-      const raw = sessionStorage.getItem('inkcredible-checkout-draft')
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<Draft>
-        draft = {
-          email: String(parsed.email || draft.email),
-          fullName: String(parsed.fullName || draft.fullName),
-          address: String(parsed.address || draft.address),
-          city: String(parsed.city || draft.city),
-          state: String(parsed.state || draft.state),
-          zip: String(parsed.zip || draft.zip),
-          cartSnapshot: Array.isArray(parsed.cartSnapshot)
-            ? parsed.cartSnapshot.map((row) => ({
-                name: String(row.name || 'Item'),
-                price: Number(row.price) || 0,
-                qty: Math.max(1, Math.round(Number(row.qty) || 1)),
-                custom: row.custom ? sanitizeCustomMeta(row.custom) : undefined,
-              }))
-            : undefined,
-        }
-        sessionStorage.removeItem('inkcredible-checkout-draft')
-      }
-    } catch {
-      /* ignore */
-    }
-
-    const customerFrom = (d: Draft, emailFallback?: string | null) => ({
-      email: d.email || emailFallback || 'stripe-checkout@unknown',
-      name: d.fullName || 'Stripe customer',
-      address: d.address,
-      city: d.city,
-      state: d.state,
-      zip: d.zip,
-    })
-
-    const finish = (id: string) => {
+    const finish = (id: string, paid: boolean) => {
       if (cancelled) return
       setOrderId(id)
-      setStripePaid(true)
+      setStripePaid(paid)
+      setSuccessPending(false)
       clear()
+      try {
+        sessionStorage.removeItem('inkcredible-checkout-draft')
+      } catch {
+        /* ignore */
+      }
       setSearchParams({}, { replace: true })
     }
 
-    const placeFromItems = async (
-      orderItems: {
-        name: string
-        price: number
-        qty: number
-        custom?: import('../data/products').CustomLogoMeta
-      }[],
-      orderTotal: number,
-      cust: ReturnType<typeof customerFrom>,
-    ) => {
-      if (sessionId) {
-        return placeOrderFromStripe({
-          sessionId,
-          customer: cust,
-          items: orderItems,
-          total: orderTotal,
-        })
+    setSuccessPending(true)
+
+    const poll = async () => {
+      if (!sessionId) {
+        // No session id — cannot look up server order
+        finish(`pending-${Date.now().toString(36)}`, true)
+        return
       }
-      return placeOrder({
-        customer: cust,
-        items: orderItems,
-        total: orderTotal,
-      })
+      try {
+        const res = await fetch(`/api/checkout/session/${encodeURIComponent(sessionId)}`)
+        const data = (await res.json().catch(() => ({}))) as {
+          orderId?: string | null
+          status?: string
+          error?: string
+        }
+        if (cancelled) return
+        if (res.ok && data.orderId) {
+          finish(data.orderId, true)
+          return
+        }
+        // Webhook may lag — retry a few times
+        attempts += 1
+        if (attempts < 12) {
+          window.setTimeout(() => {
+            void poll()
+          }, 1000)
+          return
+        }
+        // Timed out waiting for webhook — still clear cart, show session-based code
+        finish(`stripe-${sessionId}`, true)
+      } catch (err) {
+        console.warn('[checkout] session lookup failed', err)
+        attempts += 1
+        if (!cancelled && attempts < 12) {
+          window.setTimeout(() => {
+            void poll()
+          }, 1000)
+          return
+        }
+        if (!cancelled) finish(sessionId ? `stripe-${sessionId}` : `stripe-${Date.now().toString(36)}`, true)
+      }
     }
 
-    ;(async () => {
-      try {
-        // 1) Prefer live cart
-        if (items.length > 0) {
-          const orderItems = items.map(({ product, qty }) => ({
-            name: product.name,
-            price: product.price,
-            qty,
-            custom: sanitizeCustomMeta(product.custom),
-          }))
-          const order = await placeFromItems(
-            orderItems,
-            total + shippingDollarsForSubtotal(total),
-            customerFrom(draft),
-          )
-          finish(order.id)
-          return
-        }
-
-        // 2) sessionStorage cartSnapshot
-        if (draft.cartSnapshot && draft.cartSnapshot.length > 0) {
-          const snapSubtotal = draft.cartSnapshot.reduce(
-            (sum, row) => sum + row.price * row.qty,
-            0,
-          )
-          const snapTotal = snapSubtotal + shippingDollarsForSubtotal(snapSubtotal)
-          const order = await placeFromItems(draft.cartSnapshot, snapTotal, customerFrom(draft))
-          finish(order.id)
-          return
-        }
-
-        // 3) Rebuild from Stripe session
-        if (sessionId) {
-          const res = await fetch(`/api/checkout-session/${encodeURIComponent(sessionId)}`)
-          const data = (await res.json().catch(() => ({}))) as {
-            payment_status?: string
-            customer_email?: string | null
-            amount_total?: number | null
-            metadata?: Record<string, string>
-            line_items?: {
-              description?: string
-              quantity?: number
-              unit_amount?: number | null
-              amount_total?: number | null
-            }[]
-            error?: string
-          }
-          if (!res.ok) {
-            console.warn('[checkout] session retrieve failed', data.error || res.status)
-          } else {
-            let metaShipping = {
-              address: draft.address,
-              city: draft.city,
-              state: draft.state,
-              zip: draft.zip,
-            }
-            try {
-              if (data.metadata?.shipping) {
-                metaShipping = {
-                  ...metaShipping,
-                  ...(JSON.parse(data.metadata.shipping) as typeof metaShipping),
-                }
-              }
-            } catch {
-              /* ignore */
-            }
-
-            let metaItems: { name: string; price: number; qty: number }[] | null = null
-            try {
-              if (data.metadata?.cartJson) {
-                const parsed = JSON.parse(data.metadata.cartJson) as {
-                  name?: string
-                  price?: number
-                  qty?: number
-                }[]
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  metaItems = parsed.map((row) => ({
-                    name: String(row.name || 'Item'),
-                    price: Number(row.price) || 0,
-                    qty: Math.max(1, Math.round(Number(row.qty) || 1)),
-                  }))
-                }
-              }
-            } catch {
-              /* ignore */
-            }
-
-            const lineItems =
-              metaItems ??
-              (data.line_items ?? []).map((li) => {
-                const qty = Math.max(1, Math.round(Number(li.quantity) || 1))
-                const unit =
-                  li.unit_amount != null
-                    ? li.unit_amount / 100
-                    : li.amount_total != null
-                      ? li.amount_total / 100 / qty
-                      : 0
-                return {
-                  name: String(li.description || 'Item'),
-                  price: unit,
-                  qty,
-                }
-              })
-
-            const cust = customerFrom(
-              {
-                ...draft,
-                email: draft.email || String(data.metadata?.email || ''),
-                fullName: draft.fullName || String(data.metadata?.fullName || ''),
-                address: String(metaShipping.address || draft.address),
-                city: String(metaShipping.city || draft.city),
-                state: String(metaShipping.state || draft.state),
-                zip: String(metaShipping.zip || draft.zip),
-              },
-              data.customer_email,
-            )
-
-            const orderTotal =
-              data.amount_total != null
-                ? data.amount_total / 100
-                : lineItems.reduce((sum, row) => sum + row.price * row.qty, 0)
-
-            if (lineItems.length > 0 || data.payment_status === 'paid') {
-              const order = await placeFromItems(
-                lineItems.length > 0
-                  ? lineItems
-                  : [{ name: 'Stripe payment', price: orderTotal, qty: 1 }],
-                orderTotal,
-                cust,
-              )
-              finish(order.id)
-              return
-            }
-          }
-        }
-
-        // Fallback: still show success code so UI isn't stuck
-        finish(sessionId ? `stripe-${sessionId}` : `stripe-${Date.now().toString(36)}`)
-      } catch (err) {
-        console.warn('[checkout] success rebuild failed', err)
-        if (!cancelled) {
-          finish(sessionId ? `stripe-${sessionId}` : `stripe-${Date.now().toString(36)}`)
-        }
-      }
-    })()
+    void poll()
 
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on success return after hydrate
-  }, [successFlag, cartHydrated])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on success return
+  }, [successFlag, sessionId, orderId])
 
   const contactValid = useMemo(() => {
     return (
@@ -496,18 +316,11 @@ export default function Checkout() {
           state: state.trim(),
           zip: zip.trim(),
           returnOrigin: window.location.origin,
-          cartSnapshot: items.map(({ product, qty }) => ({
-            name: product.name,
-            price: product.price,
-            qty,
-            custom: sanitizeCustomMeta(product.custom),
-          })),
-          shippingCents: Math.round(shippingEstimate * 100),
           items: items.map(({ product, qty }) => ({
-            name: product.name,
-            amountCents: Math.round(product.price * 100),
-            quantity: qty,
             productId: product.id,
+            quantity: qty,
+            name: product.name,
+            config: sanitizeCustomMeta(product.custom) ?? undefined,
           })),
         }),
       })
@@ -554,6 +367,18 @@ export default function Checkout() {
         onCopy={copyOrderId}
         copied={copied}
       />
+    )
+  }
+
+  if (successPending || (successFlag && !orderId)) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col items-center gap-4 px-4 py-20 text-center sm:px-6">
+        <Loader2 className="h-10 w-10 animate-spin text-cyan" />
+        <h1 className="font-display text-2xl">Confirming your order…</h1>
+        <p className="text-sm text-mute">
+          Waiting for payment confirmation. This usually takes a second.
+        </p>
+      </div>
     )
   }
 

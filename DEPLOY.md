@@ -9,7 +9,9 @@
 ├── scripts/deploy.sh
 ├── data/                 # SACRED — persistent volume
 │   ├── orders/
-│   └── catalog/          # server-side product catalog (products.json)
+│   ├── catalog/          # server-side product catalog (products.json)
+│   ├── admin/            # PIN + session secret (gitignored)
+│   └── checkouts/        # pending Stripe checkouts (gitignored)
 ├── uploads/              # SACRED
 │   └── custom/
 ├── .env                  # SACRED — never in git
@@ -26,10 +28,10 @@ Product catalog is **server JSON** under `data/catalog/` (not browser localStora
 2. **Proxmox persistent deploy** — this doc  
 3. **Real-domain Stripe testing** — `ORIGIN=https://…`, test keys, then webhook “paid”  
 4. **Server-side catalog** — ✅ JSON under `data/catalog/` (see [CATALOG.md](./CATALOG.md); localStorage is cache only)  
-5. **Protected admin product APIs** — `GET/POST/PATCH /api/admin/products` (+ images/publish) for remote add/edit  
+5. **Protected admin APIs** — ✅ PIN login + Bearer token on orders + catalog mutations (see [SECURITY.md](./SECURITY.md))  
 6. **PostgreSQL** — only if/when JSON/SQLite outgrows the store  
 
-Stripe hardening (before live charges): Express accepts product IDs/options → loads **server** prices → creates Checkout → **webhook** marks order paid → write `data/orders/`. Browser never has final say on price.
+Stripe hardening: ✅ Express accepts product IDs/options → loads **server** prices → pending checkout → Stripe session → **webhook** creates paid order in `data/orders/`. Browser never has final say on price. See [STRIPE.md](./STRIPE.md).
 
 ---
 
@@ -57,14 +59,17 @@ npm run build
 
 ```bash
 STRIPE_SECRET_KEY=sk_test_...   # switch to sk_live_ only when ready
+STRIPE_WEBHOOK_SECRET=whsec_... # Dashboard webhook endpoint signing secret
 ORIGIN=https://YOUR_DOMAIN
 PORT=4242
+ADMIN_PIN=....                  # change after first login; also stored in data/admin/pin.json
+# ADMIN_SESSION_SECRET=...      # optional; auto-generated under data/admin/ if omitted
 ```
 
 7. Ensure data dirs exist and survive:
 
 ```bash
-mkdir -p data/orders data/catalog uploads/custom
+mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom
 # Optional: bind-mount these from a Proxmox volume/dataset
 ```
 

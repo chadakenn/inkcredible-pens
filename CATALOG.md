@@ -13,6 +13,10 @@ Shop and Store Manager use the **same** product list via the Express API on port
 
 ## API
 
+`GET` catalog endpoints are public. **Mutations** (`POST/PATCH/DELETE` products + `/api/catalog/reset`) require Store Manager Bearer token — see [SECURITY.md](./SECURITY.md).
+
+## API detail
+
 Same process as Stripe + uploads + orders (`npm run stripe:server`):
 
 | Method | Path | Notes |

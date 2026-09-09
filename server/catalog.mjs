@@ -13,6 +13,7 @@ import {
 } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { requireAdmin } from "./adminAuth.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CATALOG_DIR = path.resolve(__dirname, "../data/catalog")
@@ -197,7 +198,7 @@ export function mountCatalog(app) {
     })
   })
 
-  app.post("/api/catalog/products", (req, res) => {
+  app.post("/api/catalog/products", requireAdmin, (req, res) => {
     const body = req.body ?? {}
     const { errors, out } = validateProductShape(body, { partial: false })
     if (errors.length) {
@@ -231,7 +232,7 @@ export function mountCatalog(app) {
     return res.status(201).json({ product })
   })
 
-  app.patch("/api/catalog/products/:id", (req, res) => {
+  app.patch("/api/catalog/products/:id", requireAdmin, (req, res) => {
     const id = String(req.params.id || "")
     if (!id) return res.status(400).json({ error: "invalid_id" })
     const body = req.body ?? {}
@@ -260,7 +261,7 @@ export function mountCatalog(app) {
     return res.json({ product: products[idx] })
   })
 
-  app.delete("/api/catalog/products/:id", (req, res) => {
+  app.delete("/api/catalog/products/:id", requireAdmin, (req, res) => {
     const id = String(req.params.id || "")
     if (!id) return res.status(400).json({ error: "invalid_id" })
     const products = readProducts()
@@ -272,7 +273,7 @@ export function mountCatalog(app) {
     return res.json({ ok: true })
   })
 
-  app.post("/api/catalog/reset", (_req, res) => {
+  app.post("/api/catalog/reset", requireAdmin, (_req, res) => {
     const seed = loadSeedProducts()
     writeAtomic(seed)
     return res.json({ products: seed, reset: true, count: seed.length })

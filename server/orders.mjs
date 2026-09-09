@@ -1,10 +1,12 @@
 /**
  * Shared orders persistence (JSON on disk) — mounted on Express (4242).
  * File: /workspace/inkcredible-pens/data/orders/orders.json
+ * All HTTP routes require admin auth; webhook uses createPaidOrder().
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireAdmin } from './adminAuth.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ORDERS_DIR = path.resolve(__dirname, '../data/orders')
@@ -66,85 +68,108 @@ function normalizeItems(raw) {
     if (row.custom && typeof row.custom === 'object') {
       out.custom = row.custom
     }
+    if (row.productId) out.productId = String(row.productId)
     return out
   })
+}
+
+/**
+ * Create or return existing paid order (idempotent by stripeSessionId).
+ * Used by Stripe webhook — not exposed as a public HTTP create path for customers.
+ */
+export function createPaidOrder(input) {
+  const customer = normalizeCustomer(input.customer)
+  const items = normalizeItems(input.items)
+  if (items.length === 0) {
+    throw Object.assign(new Error('invalid_items'), { code: 'invalid_items' })
+  }
+
+  const stripeSessionId =
+    typeof input.stripeSessionId === 'string' && input.stripeSessionId.trim()
+      ? input.stripeSessionId.trim()
+      : undefined
+
+  const orders = readOrders()
+
+  if (stripeSessionId) {
+    const dup = orders.find((o) => o.stripeSessionId === stripeSessionId)
+    if (dup) return { order: dup, created: false }
+  }
+
+  let id =
+    typeof input.id === 'string' && input.id.trim() ? input.id.trim() : newOrderId()
+  if (orders.some((o) => o.id === id)) {
+    if (stripeSessionId) {
+      const existing = orders.find((o) => o.id === id)
+      if (existing) return { order: existing, created: false }
+    }
+    id = newOrderId()
+  }
+
+  const order = {
+    id,
+    createdAt:
+      typeof input.createdAt === 'string' && input.createdAt
+        ? input.createdAt
+        : new Date().toISOString(),
+    customer,
+    items,
+    status:
+      typeof input.status === 'string' && STATUSES.has(input.status)
+        ? input.status
+        : 'new',
+    total: Number(input.total) || 0,
+  }
+  if (input.paid === true) order.paid = true
+  if (stripeSessionId) order.stripeSessionId = stripeSessionId
+  if (input.shippingCents != null && Number.isFinite(Number(input.shippingCents))) {
+    order.shippingCents = Math.round(Number(input.shippingCents))
+  }
+  if (input.checkoutId) order.checkoutId = String(input.checkoutId)
+  if (input.subtotalCents != null) order.subtotalCents = Math.round(Number(input.subtotalCents))
+
+  orders.unshift(order)
+  writeOrders(orders)
+  return { order, created: true }
+}
+
+export function findOrderByStripeSession(sessionId) {
+  const sid = String(sessionId || '')
+  if (!sid) return null
+  return readOrders().find((o) => o.stripeSessionId === sid) ?? null
+}
+
+export function findOrderById(id) {
+  return readOrders().find((o) => o.id === id) ?? null
 }
 
 /**
  * @param {import('express').Express} app
  */
 export function mountOrders(app) {
-  app.get('/api/orders', (_req, res) => {
+  app.get('/api/orders', requireAdmin, (_req, res) => {
     const orders = newestFirst(readOrders())
     return res.json({ orders })
   })
 
-  app.post('/api/orders', (req, res) => {
+  app.post('/api/orders', requireAdmin, (req, res) => {
     const body = req.body ?? {}
-    const customer = normalizeCustomer(body.customer)
-    const items = normalizeItems(body.items)
-    if (!customer.email && !customer.name) {
-      return res.status(400).json({ error: 'invalid_customer' })
+    try {
+      const { order, created } = createPaidOrder({
+        ...body,
+        paid: body.paid === true,
+      })
+      return res.status(created ? 201 : 409).json({
+        order,
+        ...(created ? {} : { error: 'duplicate_stripe_session' }),
+      })
+    } catch (err) {
+      const code = err?.code || 'create_failed'
+      return res.status(400).json({ error: code })
     }
-    if (items.length === 0) {
-      return res.status(400).json({ error: 'invalid_items' })
-    }
-
-    const stripeSessionId =
-      typeof body.stripeSessionId === 'string' && body.stripeSessionId.trim()
-        ? body.stripeSessionId.trim()
-        : undefined
-
-    const orders = readOrders()
-
-    if (stripeSessionId) {
-      const dup = orders.find((o) => o.stripeSessionId === stripeSessionId)
-      if (dup) {
-        return res.status(409).json({ error: 'duplicate_stripe_session', order: dup })
-      }
-    }
-
-    let id =
-      typeof body.id === 'string' && body.id.trim() ? body.id.trim() : newOrderId()
-    if (orders.some((o) => o.id === id)) {
-      if (stripeSessionId) {
-        // Idempotent: same id + session already handled above; same id without session → reject
-        const existing = orders.find((o) => o.id === id)
-        if (existing) {
-          return res.status(409).json({ error: 'duplicate_id', order: existing })
-        }
-      } else {
-        id = newOrderId()
-      }
-    }
-
-    const status =
-      typeof body.status === 'string' && STATUSES.has(body.status)
-        ? body.status
-        : 'new'
-
-    const order = {
-      id,
-      createdAt:
-        typeof body.createdAt === 'string' && body.createdAt
-          ? body.createdAt
-          : new Date().toISOString(),
-      customer,
-      items,
-      status,
-      total: Number(body.total) || 0,
-    }
-    if (stripeSessionId) order.stripeSessionId = stripeSessionId
-    if (body.shippingCents != null && Number.isFinite(Number(body.shippingCents))) {
-      order.shippingCents = Math.round(Number(body.shippingCents))
-    }
-
-    orders.unshift(order)
-    writeOrders(orders)
-    return res.status(201).json({ order })
   })
 
-  app.patch('/api/orders/:id', (req, res) => {
+  app.patch('/api/orders/:id', requireAdmin, (req, res) => {
     const id = String(req.params.id || '')
     if (!id) return res.status(400).json({ error: 'invalid_id' })
     const body = req.body ?? {}
@@ -199,11 +224,7 @@ export function mountOrders(app) {
       } else {
         return res.status(400).json({ error: 'invalid_shippedAt' })
       }
-    } else if (
-      (hasNumber || hasCarrier) &&
-      next.trackingNumber &&
-      !next.shippedAt
-    ) {
+    } else if ((hasNumber || hasCarrier) && next.trackingNumber && !next.shippedAt) {
       next.shippedAt = new Date().toISOString()
     }
 
@@ -212,7 +233,7 @@ export function mountOrders(app) {
     return res.json({ order: orders[idx] })
   })
 
-  app.delete('/api/orders/:id', (req, res) => {
+  app.delete('/api/orders/:id', requireAdmin, (req, res) => {
     const id = String(req.params.id || '')
     if (!id) return res.status(400).json({ error: 'invalid_id' })
     const orders = readOrders()
