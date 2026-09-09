@@ -1,0 +1,310 @@
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { CustomLogoMeta } from '../data/products'
+import {
+  createOrder as apiCreateOrder,
+  deleteOrder as apiDeleteOrder,
+  fetchOrders,
+  patchOrder as apiPatchOrder,
+  updateOrderStatus as apiUpdateOrderStatus,
+  type OrdersSyncState,
+} from '../lib/ordersApi'
+
+export type OrderStatus = 'new' | 'in_progress' | 'done' | 'cancelled'
+
+export interface OrderCustomer {
+  email: string
+  name: string
+  address: string
+  city: string
+  state: string
+  zip: string
+}
+
+export interface OrderItemSnapshot {
+  name: string
+  price: number
+  qty: number
+  custom?: CustomLogoMeta
+}
+
+export interface Order {
+  id: string
+  createdAt: string
+  customer: OrderCustomer
+  items: OrderItemSnapshot[]
+  status: OrderStatus
+  total: number
+  stripeSessionId?: string
+  shippingCents?: number
+  trackingCarrier?: string
+  trackingNumber?: string
+  shippedAt?: string
+}
+
+export interface OrderTrackingInput {
+  carrier: string
+  trackingNumber: string
+}
+
+export interface PlaceOrderInput {
+  customer: OrderCustomer
+  items: OrderItemSnapshot[]
+  total: number
+  /** Optional stable id (e.g. stripe-${sessionId}) for dedupe */
+  id?: string
+  stripeSessionId?: string
+  shippingCents?: number
+}
+
+export interface PlaceOrderFromStripeInput {
+  sessionId: string
+  customer: OrderCustomer
+  items: OrderItemSnapshot[]
+  total: number
+  shippingCents?: number
+}
+
+interface OrdersState {
+  orders: Order[]
+  syncState: OrdersSyncState
+  syncError: string | null
+  placeOrder: (input: PlaceOrderInput) => Promise<Order>
+  placeOrderFromStripe: (input: PlaceOrderFromStripeInput) => Promise<Order>
+  setStatus: (id: string, status: OrderStatus) => Promise<void>
+  setTracking: (id: string, tracking: OrderTrackingInput) => Promise<void>
+  removeOrder: (id: string) => Promise<void>
+  hydrateFromApi: () => Promise<void>
+}
+
+function newOrderId(): string {
+  return `ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+function stripeOrderId(sessionId: string): string {
+  return `stripe-${sessionId}`
+}
+
+function findExisting(
+  orders: Order[],
+  opts: { id?: string; stripeSessionId?: string },
+): Order | undefined {
+  if (opts.id) {
+    const byId = orders.find((o) => o.id === opts.id)
+    if (byId) return byId
+  }
+  if (opts.stripeSessionId) {
+    const sid = opts.stripeSessionId
+    return orders.find(
+      (o) =>
+        o.stripeSessionId === sid ||
+        o.id === stripeOrderId(sid) ||
+        o.id === `stripe-${sid.slice(-12)}`,
+    )
+  }
+  return undefined
+}
+
+function mergeOrders(local: Order[], remote: Order[]): Order[] {
+  const map = new Map<string, Order>()
+  for (const o of local) map.set(o.id, o)
+  for (const o of remote) map.set(o.id, o)
+  return ordersNewestFirst([...map.values()])
+}
+
+export const useOrders = create<OrdersState>()(
+  persist(
+    (set, get) => ({
+      orders: [],
+      syncState: 'idle',
+      syncError: null,
+
+      hydrateFromApi: async () => {
+        set({ syncState: 'loading', syncError: null })
+        try {
+          const remote = await fetchOrders()
+          set((s) => ({
+            orders: mergeOrders(s.orders, remote),
+            syncState: 'synced',
+            syncError: null,
+          }))
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'sync_failed'
+          set({ syncState: 'error', syncError: message })
+        }
+      },
+
+      placeOrder: async (input) => {
+        const existing = findExisting(get().orders, {
+          id: input.id,
+          stripeSessionId: input.stripeSessionId,
+        })
+        if (existing) {
+          // Still try to ensure server has it
+          void apiCreateOrder({
+            id: existing.id,
+            createdAt: existing.createdAt,
+            customer: existing.customer,
+            items: existing.items,
+            total: existing.total,
+            status: existing.status,
+            stripeSessionId: existing.stripeSessionId,
+            shippingCents: existing.shippingCents,
+          }).catch(() => {
+            /* offline ok */
+          })
+          return existing
+        }
+
+        const order: Order = {
+          id: input.id || newOrderId(),
+          createdAt: new Date().toISOString(),
+          customer: input.customer,
+          items: input.items,
+          status: 'new',
+          total: input.total,
+          ...(input.stripeSessionId
+            ? { stripeSessionId: input.stripeSessionId }
+            : {}),
+          ...(input.shippingCents != null
+            ? { shippingCents: input.shippingCents }
+            : {}),
+        }
+        set((s) => ({ orders: [order, ...s.orders] }))
+
+        try {
+          const saved = await apiCreateOrder({
+            id: order.id,
+            createdAt: order.createdAt,
+            customer: order.customer,
+            items: order.items,
+            total: order.total,
+            status: order.status,
+            stripeSessionId: order.stripeSessionId,
+            shippingCents: order.shippingCents,
+          })
+          set((s) => ({
+            orders: mergeOrders(
+              s.orders.filter((o) => o.id !== order.id),
+              [saved],
+            ),
+            syncState: 'synced',
+            syncError: null,
+          }))
+          return saved
+        } catch {
+          set({ syncState: 'error', syncError: 'Could not sync order to server' })
+          return order
+        }
+      },
+
+      placeOrderFromStripe: async (input) => {
+        return get().placeOrder({
+          id: stripeOrderId(input.sessionId),
+          stripeSessionId: input.sessionId,
+          customer: input.customer,
+          items: input.items,
+          total: input.total,
+          shippingCents: input.shippingCents,
+        })
+      },
+
+      setStatus: async (id, status) => {
+        set((s) => ({
+          orders: s.orders.map((o) => (o.id === id ? { ...o, status } : o)),
+        }))
+        try {
+          const updated = await apiUpdateOrderStatus(id, status)
+          set((s) => ({
+            orders: s.orders.map((o) => (o.id === id ? updated : o)),
+            syncState: 'synced',
+            syncError: null,
+          }))
+        } catch {
+          set({
+            syncState: 'error',
+            syncError: 'Could not sync status — saved locally',
+          })
+        }
+      },
+
+      setTracking: async (id, tracking) => {
+        const carrier = tracking.carrier.trim()
+        const trackingNumber = tracking.trackingNumber.trim()
+        const existing = get().orders.find((o) => o.id === id)
+        const nextStatus: OrderStatus | undefined =
+          existing?.status === 'new' ? 'in_progress' : undefined
+        const shippedAt = new Date().toISOString()
+
+        set((s) => ({
+          orders: s.orders.map((o) =>
+            o.id === id
+              ? {
+                  ...o,
+                  trackingCarrier: carrier || undefined,
+                  trackingNumber: trackingNumber || undefined,
+                  shippedAt: trackingNumber ? shippedAt : o.shippedAt,
+                  ...(nextStatus ? { status: nextStatus } : {}),
+                }
+              : o,
+          ),
+        }))
+
+        try {
+          const patch: {
+            trackingCarrier: string | null
+            trackingNumber: string | null
+            shippedAt?: string
+            status?: OrderStatus
+          } = {
+            trackingCarrier: carrier || null,
+            trackingNumber: trackingNumber || null,
+          }
+          if (trackingNumber) patch.shippedAt = shippedAt
+          if (nextStatus) patch.status = nextStatus
+          const updated = await apiPatchOrder(id, patch)
+          set((s) => ({
+            orders: s.orders.map((o) => (o.id === id ? updated : o)),
+            syncState: 'synced',
+            syncError: null,
+          }))
+        } catch {
+          set({
+            syncState: 'error',
+            syncError: 'Could not sync tracking — saved locally',
+          })
+        }
+      },
+
+      removeOrder: async (id) => {
+        set((s) => ({ orders: s.orders.filter((o) => o.id !== id) }))
+        try {
+          await apiDeleteOrder(id)
+          set({ syncState: 'synced', syncError: null })
+        } catch {
+          set({
+            syncState: 'error',
+            syncError: 'Could not delete on server — removed locally',
+          })
+        }
+      },
+    }),
+    {
+      name: 'inkcredible-orders',
+      partialize: (state) => ({ orders: state.orders }),
+    },
+  ),
+)
+
+export function ordersNewestFirst(orders: Order[]): Order[] {
+  return [...orders].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+}
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  new: 'New',
+  in_progress: 'In progress',
+  done: 'Done',
+  cancelled: 'Cancelled',
+}

@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Custom artwork uploads (keep folder via .gitkeep)
+uploads/*
+!uploads/.gitkeep
+!uploads/custom/
+uploads/custom/*
+!uploads/custom/.gitkeep
+
+# Shared orders JSON (keep folder via .gitkeep)
+data/orders/*
+!data/orders/.gitkeep
+
+# Shared product catalog JSON (keep folder via .gitkeep)
+data/catalog/*
+!data/catalog/.gitkeep
