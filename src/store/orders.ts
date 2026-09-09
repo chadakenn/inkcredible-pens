@@ -123,13 +123,15 @@ export const useOrders = create<OrdersState>()(
         set({ syncState: 'loading', syncError: null })
         try {
           const remote = await fetchOrders()
-          set((s) => ({
-            orders: mergeOrders(s.orders, remote),
+          // Server list replaces local — do not merge browser "ghost" demo orders on top.
+          set({
+            orders: ordersNewestFirst(remote),
             syncState: 'synced',
             syncError: null,
-          }))
+          })
         } catch (err) {
           const message = err instanceof Error ? err.message : 'sync_failed'
+          // Keep local persist as temporary cache/fallback when API is down.
           set({ syncState: 'error', syncError: message })
         }
       },

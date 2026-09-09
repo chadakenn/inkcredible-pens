@@ -99,6 +99,9 @@ export default function Admin() {
   const resetToDefaults = useCatalog((s) => s.resetToDefaults)
 
   const scents = useScents((s) => s.scents)
+  const scentsSyncState = useScents((s) => s.syncState)
+  const scentsSyncError = useScents((s) => s.syncError)
+  const hydrateScents = useScents((s) => s.hydrateFromApi)
   const addScent = useScents((s) => s.addScent)
   const removeScent = useScents((s) => s.removeScent)
   const clearScents = useScents((s) => s.clearScents)
@@ -247,19 +250,26 @@ export default function Admin() {
   }
 
   const onAddScent = () => {
-    const ok = addScent(newScent)
-    if (!ok) {
-      setScentError(
-        newScent.trim()
-          ? 'That scent is already on the list (or the name is empty).'
-          : 'Type a scent name first.',
-      )
+    const trimmed = newScent.trim()
+    if (!trimmed) {
+      setScentError('Type a scent name first.')
       return
     }
-    setJustScent(newScent.trim())
-    setNewScent('')
-    setScentError(null)
-    window.setTimeout(() => setJustScent(null), 2500)
+    void (async () => {
+      try {
+        const ok = await addScent(trimmed)
+        if (!ok) {
+          setScentError('That scent is already on the list (or the name is empty).')
+          return
+        }
+        setJustScent(trimmed)
+        setNewScent('')
+        setScentError(null)
+        window.setTimeout(() => setJustScent(null), 2500)
+      } catch (err) {
+        setScentError(err instanceof Error ? err.message : 'Could not add scent.')
+      }
+    })()
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -411,7 +421,7 @@ export default function Admin() {
 
       <h1 className="font-display text-3xl text-cream sm:text-4xl">Store Manager</h1>
       <p className="mt-2 max-w-xl text-base text-mute">
-        Products, freshie scents, and orders — all in one place. Changes save on this device.
+        Products, freshie scents, and orders — all in one place. Catalog, scents, and orders sync from the server.
       </p>
 
       {usingDefaultPin && (
@@ -1003,10 +1013,38 @@ export default function Admin() {
         <div className="mt-8 rounded-3xl border border-cyan/30 bg-ink-2 p-5 sm:p-6">
           <h2 className="font-display text-2xl text-cream">Freshie scents</h2>
           <p className="mt-2 text-base text-mute">
-            These show up as big scent buttons when someone buys a Car Freshie. Add, rename, or delete anytime — the shop updates right away.
+            These show up as big scent buttons when someone buys a Car Freshie. The list is stored on the server so phone and laptop stay in sync.
           </p>
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase tracking-wide">
+            <span
+              className={`rounded-full px-2.5 py-0.5 ${
+                scentsSyncState === 'synced'
+                  ? 'bg-lime/15 text-lime'
+                  : scentsSyncState === 'error'
+                    ? 'bg-pink/15 text-pink'
+                    : scentsSyncState === 'loading'
+                      ? 'bg-cyan/15 text-cyan'
+                      : 'bg-ink text-mute'
+              }`}
+            >
+              {scentsSyncState === 'synced' && 'Synced'}
+              {scentsSyncState === 'loading' && 'Syncing…'}
+              {scentsSyncState === 'error' && 'Offline / API error'}
+              {scentsSyncState === 'idle' && 'Local cache'}
+            </span>
+            <button
+              type="button"
+              onClick={() => void hydrateScents()}
+              className="rounded-xl border border-line bg-ink px-2.5 py-1 text-mute hover:text-cream"
+            >
+              Refresh
+            </button>
+          </p>
+          {scentsSyncError && (
+            <p className="mt-2 text-sm text-pink">{scentsSyncError}</p>
+          )}
           <p className="mt-3 rounded-2xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-extrabold text-amber-200">
-            starter scents — replace with what’s in stock.
+            Starter seed on first boot — replace with what’s in stock.
           </p>
 
           {justScent && (
@@ -1079,10 +1117,17 @@ export default function Admin() {
                 <button
                   type="button"
                   onClick={() => {
-                    resetScents()
-                    setConfirmResetScents(false)
-                    setEditingScent(null)
-                    setConfirmDeleteScent(null)
+                    void (async () => {
+                      try {
+                        await resetScents()
+                        setConfirmResetScents(false)
+                        setEditingScent(null)
+                        setConfirmDeleteScent(null)
+                        setScentError(null)
+                      } catch (err) {
+                        setScentError(err instanceof Error ? err.message : 'Reset failed')
+                      }
+                    })()
                   }}
                   className="min-h-12 flex-1 rounded-xl bg-pink px-4 text-base font-extrabold text-white"
                 >
@@ -1108,10 +1153,17 @@ export default function Admin() {
                 <button
                   type="button"
                   onClick={() => {
-                    clearScents()
-                    setConfirmClearScents(false)
-                    setEditingScent(null)
-                    setConfirmDeleteScent(null)
+                    void (async () => {
+                      try {
+                        await clearScents()
+                        setConfirmClearScents(false)
+                        setEditingScent(null)
+                        setConfirmDeleteScent(null)
+                        setScentError(null)
+                      } catch (err) {
+                        setScentError(err instanceof Error ? err.message : 'Clear failed')
+                      }
+                    })()
                   }}
                   className="min-h-12 flex-1 rounded-xl bg-pink px-4 text-base font-extrabold text-white"
                 >
@@ -1151,13 +1203,21 @@ export default function Admin() {
                       <button
                         type="button"
                         onClick={() => {
-                          const ok = renameScent(s, editScentValue)
-                          if (!ok) {
-                            setScentError('Could not rename — empty or already exists.')
-                            return
-                          }
-                          setEditingScent(null)
-                          setScentError(null)
+                          void (async () => {
+                            try {
+                              const ok = await renameScent(s, editScentValue)
+                              if (!ok) {
+                                setScentError('Could not rename — empty or already exists.')
+                                return
+                              }
+                              setEditingScent(null)
+                              setScentError(null)
+                            } catch (err) {
+                              setScentError(
+                                err instanceof Error ? err.message : 'Rename failed',
+                              )
+                            }
+                          })()
                         }}
                         className="min-h-12 flex-1 rounded-xl bg-lime px-4 text-base font-extrabold text-ink"
                       >
@@ -1181,8 +1241,17 @@ export default function Admin() {
                       <button
                         type="button"
                         onClick={() => {
-                          removeScent(s)
-                          setConfirmDeleteScent(null)
+                          void (async () => {
+                            try {
+                              await removeScent(s)
+                              setConfirmDeleteScent(null)
+                              setScentError(null)
+                            } catch (err) {
+                              setScentError(
+                                err instanceof Error ? err.message : 'Delete failed',
+                              )
+                            }
+                          })()
                         }}
                         className="min-h-12 flex-1 rounded-xl bg-pink px-3 text-sm font-extrabold text-white"
                       >

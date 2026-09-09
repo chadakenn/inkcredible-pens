@@ -17,6 +17,7 @@ import {
   readJsonFile,
   writeJsonAtomic,
 } from "./security.mjs"
+import { deleteProductUploadIfUnreferenced } from "./uploads.mjs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CATALOG_DIR = path.resolve(__dirname, "../data/catalog")
@@ -281,7 +282,8 @@ export function mountCatalog(app) {
     const idx = products.findIndex((p) => p.id === id)
     if (idx < 0) return res.status(404).json({ error: "not_found" })
 
-    const next = { ...products[idx] }
+    const prev = products[idx]
+    const next = { ...prev }
     for (const [key, value] of Object.entries(out)) {
       if (value === undefined) {
         delete next[key]
@@ -291,6 +293,14 @@ export function mountCatalog(app) {
     }
     products[idx] = next
     writeAtomic(products)
+    // If imageUrl changed/cleared, drop the old uploads/products file when unreferenced.
+    if (
+      Object.prototype.hasOwnProperty.call(out, "imageUrl") &&
+      prev.imageUrl &&
+      prev.imageUrl !== next.imageUrl
+    ) {
+      deleteProductUploadIfUnreferenced(prev.imageUrl, products)
+    }
     return res.json({ product: products[idx] })
   })
 
@@ -303,11 +313,15 @@ export function mountCatalog(app) {
     } catch (err) {
       return handleCorrupt(res, err)
     }
+    const removed = products.find((p) => p.id === id)
     const next = products.filter((p) => p.id !== id)
     if (next.length === products.length) {
       return res.status(404).json({ error: "not_found" })
     }
     writeAtomic(next)
+    if (removed?.imageUrl) {
+      deleteProductUploadIfUnreferenced(removed.imageUrl, next)
+    }
     return res.json({ ok: true })
   })
 

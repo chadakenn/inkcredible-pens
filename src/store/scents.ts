@@ -1,7 +1,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import {
+  ScentsApiError,
+  clearScentsApi,
+  createScent,
+  deleteScent,
+  fetchScents,
+  renameScentApi,
+  resetScentsApi,
+  type ScentsSyncState,
+} from '../lib/scentsApi'
 
-// Starter scents — replace with what’s in stock.
+// Starter scents — server seed is authoritative; this is offline/cache fallback only.
 export const DEFAULT_SCENTS = [
   'Vanilla Bean',
   'Lavender',
@@ -17,50 +27,135 @@ export const DEFAULT_SCENTS = [
 
 interface ScentsState {
   scents: string[]
-  addScent: (name: string) => boolean
-  removeScent: (name: string) => void
-  clearScents: () => void
-  renameScent: (from: string, to: string) => boolean
-  resetToDefaults: () => void
+  syncState: ScentsSyncState
+  syncError: string | null
+  hydrateFromApi: () => Promise<void>
+  addScent: (name: string) => Promise<boolean>
+  removeScent: (name: string) => Promise<void>
+  clearScents: () => Promise<void>
+  renameScent: (from: string, to: string) => Promise<boolean>
+  resetToDefaults: () => Promise<void>
 }
 
 function normalize(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
 }
 
+function mutationErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ScentsApiError) {
+    if (err.status === 0 || err.message.includes('Failed to fetch')) {
+      return 'Scents server unavailable — try again when online.'
+    }
+    if (err.status === 401 || err.status === 403) {
+      return 'Admin login required to change scents.'
+    }
+    return err.message || fallback
+  }
+  if (err instanceof TypeError) {
+    return 'Scents server unavailable — try again when online.'
+  }
+  if (err instanceof Error && err.message) return err.message
+  return fallback
+}
+
 export const useScents = create<ScentsState>()(
   persist(
     (set, get) => ({
       scents: [...DEFAULT_SCENTS],
-      addScent: (name) => {
+      syncState: 'idle',
+      syncError: null,
+
+      hydrateFromApi: async () => {
+        set({ syncState: 'loading', syncError: null })
+        try {
+          const remote = await fetchScents()
+          set({
+            scents: remote,
+            syncState: 'synced',
+            syncError: null,
+          })
+        } catch (err) {
+          const message = mutationErrorMessage(err, 'sync_failed')
+          // Keep cached scents; mark offline — cache is not source of truth
+          set({ syncState: 'error', syncError: message })
+        }
+      },
+
+      addScent: async (name) => {
         const next = normalize(name)
         if (!next) return false
-        const exists = get().scents.some(
-          (s) => s.toLowerCase() === next.toLowerCase(),
-        )
-        if (exists) return false
-        set((s) => ({ scents: [...s.scents, next] }))
-        return true
+        try {
+          const scents = await createScent(next)
+          set({ scents, syncState: 'synced', syncError: null })
+          return true
+        } catch (err) {
+          if (err instanceof ScentsApiError && err.code === 'duplicate_scent') {
+            return false
+          }
+          const message = mutationErrorMessage(err, 'Could not add scent on server.')
+          set({ syncState: 'error', syncError: message })
+          throw new Error(message)
+        }
       },
-      removeScent: (name) =>
-        set((s) => ({ scents: s.scents.filter((x) => x !== name) })),
-      clearScents: () => set({ scents: [] }),
-      renameScent: (from, to) => {
+
+      removeScent: async (name) => {
+        try {
+          const scents = await deleteScent(name)
+          set({ scents, syncState: 'synced', syncError: null })
+        } catch (err) {
+          const message = mutationErrorMessage(err, 'Could not remove scent on server.')
+          set({ syncState: 'error', syncError: message })
+          throw new Error(message)
+        }
+      },
+
+      clearScents: async () => {
+        try {
+          const scents = await clearScentsApi()
+          set({ scents, syncState: 'synced', syncError: null })
+        } catch (err) {
+          const message = mutationErrorMessage(err, 'Could not clear scents on server.')
+          set({ syncState: 'error', syncError: message })
+          throw new Error(message)
+        }
+      },
+
+      renameScent: async (from, to) => {
         const next = normalize(to)
         if (!next) return false
-        const list = get().scents
-        if (!list.includes(from)) return false
-        const clash = list.some(
-          (s) => s !== from && s.toLowerCase() === next.toLowerCase(),
-        )
-        if (clash) return false
-        set({
-          scents: list.map((s) => (s === from ? next : s)),
-        })
-        return true
+        if (!get().scents.includes(from)) return false
+        try {
+          const scents = await renameScentApi(from, next)
+          set({ scents, syncState: 'synced', syncError: null })
+          return true
+        } catch (err) {
+          if (
+            err instanceof ScentsApiError &&
+            (err.code === 'duplicate_scent' || err.code === 'invalid_rename')
+          ) {
+            return false
+          }
+          const message = mutationErrorMessage(err, 'Could not rename scent on server.')
+          set({ syncState: 'error', syncError: message })
+          throw new Error(message)
+        }
       },
-      resetToDefaults: () => set({ scents: [...DEFAULT_SCENTS] }),
+
+      resetToDefaults: async () => {
+        try {
+          const scents = await resetScentsApi()
+          set({ scents, syncState: 'synced', syncError: null })
+        } catch (err) {
+          const message = mutationErrorMessage(err, 'Could not reset scents on server.')
+          set({ syncState: 'error', syncError: message })
+          throw new Error(message)
+        }
+      },
     }),
-    { name: 'inkcredible-freshie-scents' },
+    {
+      name: 'inkcredible-freshie-scents',
+      version: 2,
+      partialize: (state) => ({ scents: state.scents }),
+    },
   ),
 )

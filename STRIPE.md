@@ -15,7 +15,7 @@ npm run stripe:server
 
 Server listens on **`127.0.0.1:4242`** only (not all interfaces). Vite proxies `/api` → `http://127.0.0.1:4242`.
 
-3. In another terminal: `npm run dev` (port 5173), open Checkout, fill contact/shipping, click **Pay with Stripe**.
+3. In another terminal: `npm run dev` (port 5173), open Checkout, enter email + name (shipping fields are optional prefill), click **Pay with Stripe**, then confirm address on Stripe.
 
 ## Local webhooks (required for paid orders)
 
@@ -61,6 +61,24 @@ Set `ORIGIN=https://inkcrediblepens.org` in production. Client `returnOrigin` is
 - Without `STRIPE_SECRET_KEY`, Checkout cannot charge. **Save demo order (no charge)** and Stripe test-card hints appear in **development builds only** (`import.meta.env.DEV`) — production builds show normal checkout UX only.
 - Health check: `GET http://127.0.0.1:4242/api/health` → `{ ok, stripe, webhook, productionHardening }`.
 - Success lookup: `GET /api/checkout/session/:id` → order id / status only (no full PII).
+
+## Shipping address authority
+
+**Stripe Checkout is the single authority** for the paid order’s shipping/customer address.
+
+1. In-app Checkout may collect email/name (required) and optional address fields as **prefill only**.
+2. Stripe session creation enables `shipping_address_collection` (US). The customer confirms/edits shipping on Stripe’s hosted page.
+3. On fulfill (`checkout.session.completed` / `async_payment_succeeded`), the webhook builds the order customer from **`session.shipping_details`** and **`session.customer_details`**, falling back to the pending checkout record only when Stripe fields are missing.
+
+Do not treat the pre-Stripe pending checkout address as final when Stripe has shipping details.
+
+## Payment status before Paid
+
+Orders are marked paid **only** when `session.payment_status === 'paid'`.
+
+- `checkout.session.completed` with `processing` / `unpaid` (async methods) does **not** create a paid order.
+- `checkout.session.async_payment_succeeded` fulfills when status becomes `paid`.
+- Success UI / `GET /api/checkout/session/:id` show pending or processing until the server has a real paid `orderId`.
 
 ## Custom artwork uploads
 

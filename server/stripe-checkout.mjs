@@ -12,6 +12,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { mountUploads, startRetentionJobs } from './uploads.mjs'
 import { mountOrders, createPaidOrder, findOrderByStripeSession } from './orders.mjs'
 import { mountCatalog } from './catalog.mjs'
+import { mountScents } from './scents.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { priceCart } from './pricing.mjs'
 import {
@@ -128,9 +129,29 @@ app.post(
     }
 
     try {
-      if (event.type === 'checkout.session.completed') {
+      if (
+        event.type === 'checkout.session.completed' ||
+        event.type === 'checkout.session.async_payment_succeeded'
+      ) {
         const session = event.data.object
-        await fulfillCheckoutSession(session)
+        // Do not mark Paid until Stripe says paid (async methods may complete unpaid).
+        if (session.payment_status !== 'paid') {
+          console.warn(
+            '[stripe-webhook]',
+            event.type,
+            session.id,
+            'payment_status=',
+            session.payment_status,
+            '— skipping paid-order create',
+          )
+        } else {
+          await fulfillCheckoutSession(session)
+        }
+      } else if (event.type === 'checkout.session.async_payment_failed') {
+        console.warn(
+          '[stripe-webhook] async_payment_failed',
+          event.data.object?.id,
+        )
       }
     } catch (err) {
       console.error('[stripe-webhook] handler failed', err)
@@ -146,6 +167,7 @@ mountAdminAuth(app)
 mountUploads(app)
 mountOrders(app)
 mountCatalog(app)
+mountScents(app)
 
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -207,12 +229,20 @@ app.get('/api/checkout/session/:id', async (req, res) => {
           })
         }
       }
+      const ps = session.payment_status
       return res.json({
         sessionId: id,
-        status: 'pending_confirmation',
+        status:
+          ps === 'processing'
+            ? 'processing'
+            : 'pending_confirmation',
         orderId: null,
         paymentConfirmed: false,
-        stripePaymentStatus: session.payment_status,
+        stripePaymentStatus: ps,
+        message:
+          ps === 'processing'
+            ? 'Payment is still processing. Refresh shortly — order is not marked Paid yet.'
+            : undefined,
       })
     } catch (err) {
       console.error('[checkout-session] stripe retrieve failed', err)
@@ -277,8 +307,46 @@ app.get('/api/checkout-session/:id', async (req, res) => {
   }
 })
 
+/**
+ * Prefer Stripe Checkout finalized customer/shipping over the pre-Stripe pending checkout.
+ * App contact/shipping fields are prefill / fallback only — Stripe shipping_address_collection
+ * is the authority when present.
+ */
+function customerFromStripeSession(session, fallback) {
+  const fb = fallback && typeof fallback === 'object' ? fallback : {}
+  const shipping = session.shipping_details
+  const details = session.customer_details
+  const addr =
+    (shipping && shipping.address) ||
+    (details && details.address) ||
+    null
+
+  const line1 = addr?.line1 ? String(addr.line1).trim() : ''
+  const line2 = addr?.line2 ? String(addr.line2).trim() : ''
+  const street = [line1, line2].filter(Boolean).join(', ')
+
+  return {
+    email: String(details?.email || fb.email || ''),
+    name: String(
+      (shipping && shipping.name) || details?.name || fb.name || '',
+    ),
+    address: street || String(fb.address || ''),
+    city: String(addr?.city || fb.city || ''),
+    state: String(addr?.state || fb.state || ''),
+    zip: String(addr?.postal_code || fb.zip || ''),
+  }
+}
+
 function fulfillCheckoutSession(session) {
   const sessionId = session.id
+
+  if (session.payment_status !== 'paid') {
+    const err = new Error(`payment_not_paid:${session.payment_status || 'unknown'}`)
+    err.code = 'payment_not_paid'
+    err.payment_status = session.payment_status
+    throw err
+  }
+
   const existing = findOrderByStripeSession(sessionId)
   if (existing) {
     return existing
@@ -312,11 +380,14 @@ function fulfillCheckoutSession(session) {
       ? pending.totalCents / 100
       : (session.amount_total ?? 0) / 100
 
+  // Stripe finalized shipping/customer wins; pending checkout is fallback only.
+  const customer = customerFromStripeSession(session, pending.customer)
+
   const { order } = createPaidOrder({
     id: `stripe-${sessionId}`,
     stripeSessionId: sessionId,
     checkoutId: pending.id,
-    customer: pending.customer,
+    customer,
     items,
     total,
     shippingCents: pending.shippingCents,

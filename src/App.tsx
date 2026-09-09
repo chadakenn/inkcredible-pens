@@ -24,6 +24,7 @@ import SearchPage from './pages/SearchPage'
 import NotFound from './pages/NotFound'
 import Contact from './pages/Contact'
 import { useCatalog } from './store/catalog'
+import { useScents } from './store/scents'
 
 function PageFade({ children }: { children: ReactNode }) {
   const location = useLocation()
@@ -39,9 +40,11 @@ function PageFade({ children }: { children: ReactNode }) {
 
 export default function App() {
   const hydrateCatalog = useCatalog((s) => s.hydrateFromApi)
+  const hydrateScents = useScents((s) => s.hydrateFromApi)
   useEffect(() => {
     void hydrateCatalog()
-  }, [hydrateCatalog])
+    void hydrateScents()
+  }, [hydrateCatalog, hydrateScents])
 
   return (
     <div className="noise-bg min-h-dvh flex flex-col">

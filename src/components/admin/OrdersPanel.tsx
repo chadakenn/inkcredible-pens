@@ -420,7 +420,7 @@ export default function OrdersPanel() {
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-base text-mute">
-          Newest first. Tap an order to expand, change status, or delete.
+          Newest first from the <span className="font-bold text-cream">server</span>. Tap an order to expand, change status, or delete.
         </p>
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide ${
@@ -434,10 +434,10 @@ export default function OrdersPanel() {
           }`}
           title={syncError || undefined}
         >
-          {syncState === 'synced' && 'Synced'}
+          {syncState === 'synced' && 'Synced (server)'}
           {syncState === 'loading' && 'Syncing…'}
-          {syncState === 'error' && 'Offline / API error'}
-          {syncState === 'idle' && 'Local cache'}
+          {syncState === 'error' && 'Offline — cache only'}
+          {syncState === 'idle' && 'Not synced'}
         </span>
         <button
           type="button"
@@ -451,7 +451,7 @@ export default function OrdersPanel() {
       </div>
       {syncState === 'error' && (
         <p className="mt-2 text-sm text-pink">
-          {syncError || 'Could not reach orders API'} — showing local cache. Phone and laptop share orders when the server on 4242 is up.
+          {syncError || 'Could not reach orders API'} — showing temporary local cache only. When Synced, Store Manager shows server orders only (no laptop demo ghosts).
         </p>
       )}
 

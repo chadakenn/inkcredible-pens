@@ -288,16 +288,11 @@ export default function Checkout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on success return
   }, [successFlag, sessionId, orderId, pendingConfirmation])
 
+  // Email + name required to start Stripe. Shipping fields are optional prefill only —
+  // Stripe Checkout shipping_address_collection is the final authority on the paid order.
   const contactValid = useMemo(() => {
-    return (
-      email.trim().length > 3 &&
-      fullName.trim().length > 0 &&
-      address.trim().length > 0 &&
-      city.trim().length > 0 &&
-      state.trim().length > 0 &&
-      zip.trim().length > 0
-    )
-  }, [email, fullName, address, city, state, zip])
+    return email.trim().length > 3 && fullName.trim().length > 0
+  }, [email, fullName])
 
   const buildLocalOrder = async () => {
     return placeOrder({
@@ -323,6 +318,17 @@ export default function Checkout() {
   const onDemoSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!IS_DEV) return
+    if (
+      !email.trim() ||
+      !fullName.trim() ||
+      !address.trim() ||
+      !city.trim() ||
+      !state.trim() ||
+      !zip.trim()
+    ) {
+      setPayError('Demo order needs full contact + shipping filled in.')
+      return
+    }
     void (async () => {
       const order = await buildLocalOrder()
       setStripePaid(false)
@@ -345,7 +351,7 @@ export default function Checkout() {
   const onPayWithStripe = async () => {
     setPayError(null)
     if (!contactValid) {
-      setPayError('Fill in contact and shipping before paying with Stripe.')
+      setPayError('Enter email and full name before paying with Stripe.')
       return
     }
     setPaying(true)
@@ -517,38 +523,42 @@ export default function Checkout() {
           </fieldset>
 
           <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
-            <legend className="px-1 font-display text-lg">Shipping</legend>
+            <legend className="px-1 font-display text-lg">Shipping (optional prefill)</legend>
+            <p className="text-xs text-mute">
+              You will confirm your shipping address on Stripe Checkout — that finalized address is
+              what we use for the paid order. Fields here are optional prefill only.
+            </p>
             <input
-              required
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Address"
+              placeholder="Address (optional)"
+              autoComplete="street-address"
               className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-cyan"
             />
             <div className="grid gap-3 sm:grid-cols-3">
               <input
-                required
                 type="text"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="City"
+                autoComplete="address-level2"
                 className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-cyan"
               />
               <input
-                required
                 type="text"
                 value={state}
                 onChange={(e) => setState(e.target.value)}
                 placeholder="State"
+                autoComplete="address-level1"
                 className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-cyan"
               />
               <input
-                required
                 type="text"
                 value={zip}
                 onChange={(e) => setZip(e.target.value)}
                 placeholder="ZIP"
+                autoComplete="postal-code"
                 className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-cyan"
               />
             </div>

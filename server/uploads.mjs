@@ -233,6 +233,36 @@ export function mountUploads(app) {
 
 
 /**
+ * Walk checkout/order JSON shapes (single record, {orders|items|lines}, or array)
+ * and collect custom artwork file ids still in use.
+ */
+function collectArtworkRefsFromValue(data, ids) {
+  if (data == null) return
+  if (Array.isArray(data)) {
+    for (const item of data) collectArtworkRefsFromValue(item, ids)
+    return
+  }
+  if (typeof data !== 'object') return
+
+  if (Array.isArray(data.orders)) collectArtworkRefsFromValue(data.orders, ids)
+  if (Array.isArray(data.checkouts)) collectArtworkRefsFromValue(data.checkouts, ids)
+
+  const lines = data.lines || data.items
+  if (Array.isArray(lines)) {
+    for (const line of lines) {
+      const c = line?.custom || line?.config
+      if (!c || typeof c !== 'object') continue
+      if (c.artworkId) ids.add(path.basename(String(c.artworkId)))
+      if (c.artworkFileName) ids.add(path.basename(String(c.artworkFileName)))
+      if (typeof c.artworkUrl === 'string') {
+        const m = /\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif))$/i.exec(c.artworkUrl)
+        if (m) ids.add(m[1])
+      }
+    }
+  }
+}
+
+/**
  * Collect artwork ids referenced by pending/completed checkouts and paid orders.
  * Used so cleanup does not delete files still needed for open checkouts / orders.
  */
@@ -246,24 +276,14 @@ function referencedArtworkIds() {
     if (!existsSync(dir)) continue
     let files = []
     try {
-      files = readdirSync(dir).filter((f) => f.endsWith('.json'))
+      files = readdirSync(dir).filter((f) => f.endsWith('.json') && !f.includes('.bak'))
     } catch {
       continue
     }
     for (const f of files) {
       try {
         const data = readJsonFile(path.join(dir, f))
-        const lines = data?.lines || data?.items || []
-        if (!Array.isArray(lines)) continue
-        for (const line of lines) {
-          const c = line?.custom || line?.config
-          if (c?.artworkId) ids.add(String(c.artworkId))
-          if (c?.artworkFileName) ids.add(path.basename(String(c.artworkFileName)))
-          if (typeof c?.artworkUrl === 'string') {
-            const m = /\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif))$/i.exec(c.artworkUrl)
-            if (m) ids.add(m[1])
-          }
-        }
+        collectArtworkRefsFromValue(data, ids)
       } catch {
         /* skip */
       }
@@ -272,9 +292,99 @@ function referencedArtworkIds() {
   return ids
 }
 
+const PRODUCT_UPLOAD_URL_RE =
+  /^\/uploads\/products\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif))$/i
+
+/**
+ * Extract product upload filename from a catalog imageUrl path, or null.
+ */
+export function productUploadFilenameFromUrl(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== 'string') return null
+  const m = PRODUCT_UPLOAD_URL_RE.exec(imageUrl.trim())
+  return m ? m[1] : null
+}
+
+/**
+ * Delete a product photo under uploads/products/ if no catalog product references it.
+ * Safe no-op for non-local URLs or missing files.
+ * @param {string|undefined|null} imageUrl
+ * @param {Array<{ imageUrl?: string }>} catalogProducts current catalog (after mutation)
+ * @returns {{ deleted: boolean, filename: string|null }}
+ */
+export function deleteProductUploadIfUnreferenced(imageUrl, catalogProducts) {
+  const filename = productUploadFilenameFromUrl(imageUrl)
+  if (!filename) return { deleted: false, filename: null }
+  const stillUsed = (Array.isArray(catalogProducts) ? catalogProducts : []).some(
+    (p) => productUploadFilenameFromUrl(p?.imageUrl) === filename,
+  )
+  if (stillUsed) return { deleted: false, filename }
+  const full = path.join(PRODUCT_UPLOAD_DIR, filename)
+  if (!existsSync(full)) return { deleted: false, filename }
+  try {
+    unlinkSync(full)
+    console.log('[uploads] removed unreferenced product photo', filename)
+    return { deleted: true, filename }
+  } catch (err) {
+    console.error('[uploads] failed to remove product photo', filename, err)
+    return { deleted: false, filename }
+  }
+}
+
+/**
+ * Sweep product photos older than maxAgeMs that are not referenced by catalog.
+ * Conservative: only UUID-named files under uploads/products/.
+ */
+export function cleanupOrphanProductUploads(maxAgeMs = 0) {
+  const catalogPath = path.resolve(__dirname, '../data/catalog/products.json')
+  let products = []
+  try {
+    if (existsSync(catalogPath)) {
+      const data = readJsonFile(catalogPath)
+      if (Array.isArray(data)) products = data
+      else if (data && Array.isArray(data.products)) products = data.products
+    }
+  } catch (err) {
+    console.error('[uploads] catalog read for product orphan sweep failed', err)
+    return { removed: 0, scanned: 0, keptReferenced: 0 }
+  }
+  const referenced = new Set()
+  for (const p of products) {
+    const name = productUploadFilenameFromUrl(p?.imageUrl)
+    if (name) referenced.add(name)
+  }
+  const now = Date.now()
+  let removed = 0
+  let scanned = 0
+  let keptReferenced = 0
+  try {
+    const files = readdirSync(PRODUCT_UPLOAD_DIR).filter((f) =>
+      /^[a-f0-9-]{36}\.(jpe?g|png|webp|gif)$/i.test(f),
+    )
+    for (const f of files) {
+      scanned += 1
+      if (referenced.has(f)) {
+        keptReferenced += 1
+        continue
+      }
+      const full = path.join(PRODUCT_UPLOAD_DIR, f)
+      try {
+        const st = statSync(full)
+        if (maxAgeMs > 0 && now - st.mtimeMs < maxAgeMs) continue
+        unlinkSync(full)
+        removed += 1
+      } catch (err) {
+        console.error('[uploads] product orphan skip', f, err)
+      }
+    }
+  } catch (err) {
+    console.error('[uploads] product orphan sweep failed', err)
+  }
+  return { removed, scanned, keptReferenced }
+}
+
 /**
  * Delete abandoned customer artwork older than maxAgeMs that is not referenced
- * by a checkout or order JSON. Product photos are never auto-deleted.
+ * by a checkout or order JSON. Unreferenced product photos are swept separately.
  * @returns {{ removed: number, scanned: number, keptReferenced: number }}
  */
 export function cleanupAbandonedCustomUploads(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
@@ -323,6 +433,11 @@ export function startRetentionJobs({ cleanupCheckouts } = {}) {
     const u = cleanupAbandonedCustomUploads(uploadMs)
     console.log(
       `[retention] custom uploads: removed=${u.removed} scanned=${u.scanned} keptReferenced=${u.keptReferenced} (age>${uploadDays}d)`,
+    )
+    // Product photos: delete only files not referenced by catalog (immediate when unreferenced).
+    const p = cleanupOrphanProductUploads(0)
+    console.log(
+      `[retention] product photos: removed=${p.removed} scanned=${p.scanned} keptReferenced=${p.keptReferenced}`,
     )
     if (typeof cleanupCheckouts === 'function') {
       const c = cleanupCheckouts(checkoutMs)

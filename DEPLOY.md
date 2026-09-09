@@ -9,7 +9,7 @@
 ├── scripts/deploy.sh
 ├── data/                 # SACRED — persistent volume (owner: inkcredible)
 │   ├── orders/
-│   ├── catalog/          # server-side product catalog (products.json)
+│   ├── catalog/          # products.json + scents.json (server-side)
 │   ├── admin/            # PIN + session secret (gitignored; mode 750)
 │   └── checkouts/        # pending Stripe checkouts (gitignored)
 ├── uploads/              # SACRED (owner: inkcredible)
@@ -96,7 +96,19 @@ chmod 755 uploads uploads/products   # products may be read via the app; still o
 # Optional: bind-mount these from a Proxmox volume/dataset
 ```
 
-**Disk quota guidance:** customer artwork under `uploads/custom/` can grow. Plan volume size for peak concurrent carts × ~12MB + headroom (e.g. 5–20 GB). Retention jobs delete abandoned uploads / checkout JSON older than 7 days by default.
+**Disk quota guidance:** customer artwork under `uploads/custom/` can grow. Plan volume size for peak concurrent carts × ~12MB + headroom (e.g. 5–20 GB). Retention jobs (startup + daily) delete abandoned custom uploads / checkout JSON older than 7 days by default, and remove unreferenced product photos.
+
+### Encrypted off-host backups (required for PII)
+
+Proxmox snapshots protect the guest disk, but **orders + customer artwork** should also be copied **off-host** with encryption (restic, borg, age-encrypted tarball to object storage, etc.):
+
+```bash
+# Example shape only — pick your tool and keys
+# Backup: data/ (orders, checkouts, catalog, scents, admin) + uploads/
+# Store encrypted copies off the Proxmox host; test restore quarterly.
+```
+
+Checklist item: encrypted off-host backup of `data/` + `uploads/` is configured and a restore has been tested.
 
 8. Run the API under **systemd** as **`inkcredible`** (example unit below).
 9. Put a reverse proxy in front (Caddy or nginx) on the guest **or** use Cloudflare Tunnel — see section C.
@@ -212,6 +224,7 @@ Confirm:
 - [ ] systemd `User=inkcredible` + correct dir ownership
 - [ ] Node listens on `127.0.0.1` only
 - [ ] Cloudflare SSL + DNS correct
+- [ ] Encrypted off-host backups of `data/` + `uploads/` (not only Proxmox snapshots)
 - [ ] Only then: Stripe **live** keys
 
 ---

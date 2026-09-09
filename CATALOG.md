@@ -51,3 +51,21 @@ Initial catalog was generated from `src/data/products.ts` with the same SEED_OVE
 ## Production deploy
 
 See [DEPLOY.md](./DEPLOY.md). Catalog lives under sacred `data/`.
+
+## Freshie scents
+
+Same `data/catalog/` folder:
+
+- Live: `data/catalog/scents.json` (gitignored)
+- Seed: `server/scents-seed.json`
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/api/scents` | Public → `{ scents }` |
+| `POST` | `/api/scents` | Admin add `{ name }` |
+| `PATCH` | `/api/scents` | Admin rename `{ from, to }` |
+| `DELETE` | `/api/scents/:name` | Admin remove |
+| `POST` | `/api/scents/clear` | Admin clear all |
+| `POST` | `/api/scents/reset` | Admin restore seed |
+
+Client: `src/lib/scentsApi.ts` + `src/store/scents.ts` (hydrate from API; localStorage cache only).

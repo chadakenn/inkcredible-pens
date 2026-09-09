@@ -24,10 +24,10 @@ Uploaded binaries are gitignored; `uploads/custom/.gitkeep` keeps the folder in 
 
 ### Retention / disk quota
 
-- Startup + daily job deletes **abandoned** custom uploads older than **`UPLOAD_RETENTION_DAYS`** (default **7**) that are not referenced by checkout/order JSON.
+- Startup + daily job deletes **abandoned** custom uploads older than **`UPLOAD_RETENTION_DAYS`** (default **7**) that are not referenced by checkout/order JSON (including `orders.json` arrays).
 - Pending/completed checkout JSON older than **`CHECKOUT_RETENTION_DAYS`** (default **7**) is removed the same way.
-- Product photos under `uploads/products/` are **not** auto-deleted.
-- **Quota guidance:** size the volume for peak concurrent carts × ~12MB + headroom (often 5–20 GB). Monitor `uploads/custom/` growth after launch.
+- Product photos under `uploads/products/`: when a product’s `imageUrl` changes or the product is deleted, the old file is removed **if unreferenced** by the catalog. Retention also sweeps unreferenced product UUID files.
+- **Quota guidance:** size the volume for peak concurrent carts × ~12MB + headroom (often 5–20 GB). Monitor `uploads/custom/` growth after launch. Keep **encrypted off-host backups** of `uploads/` (see [DEPLOY.md](./DEPLOY.md) / [SECURITY.md](./SECURITY.md)).
 
 ### API
 
