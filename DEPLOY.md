@@ -152,17 +152,35 @@ ss -ltnp | grep 4242
 
 ## B. Serve the website (frontend)
 
-**Option 1 — Caddy/nginx serves `dist/` and proxies API** (recommended):
+**Option 1 — Caddy serves `dist/` and proxies API** (recommended):
 
-- `https://YOUR_DOMAIN/` → static files from `dist/`
-- `https://YOUR_DOMAIN/api/*` → `http://127.0.0.1:4242`
-- `https://YOUR_DOMAIN/uploads/*` → `http://127.0.0.1:4242` (or alias to disk)
+Production config lives at [`deploy/Caddyfile`](./deploy/Caddyfile):
+
+- `https://inkcrediblepens.org/` → static SPA from `/opt/inkcredible-pens/dist` (fallback to `index.html`)
+- `www.` → permanent redirect to apex
+- `/api/*` → `reverse_proxy` → `127.0.0.1:4242`
+- `/uploads/*` → `reverse_proxy` → `127.0.0.1:4242` (keeps custom-art admin auth on Node; do not file_server uploads)
+
+TLS is automatic with Caddy when DNS points at this host (see comments in the Caddyfile).
+
+Install / symlink on the guest:
+
+```bash
+# After cloning to /opt/inkcredible-pens
+apt-get install -y caddy   # or use Caddy's official package
+# Prefer a symlink so git pulls pick up Caddyfile changes:
+ln -sf /opt/inkcredible-pens/deploy/Caddyfile /etc/caddy/Caddyfile
+# Or copy once if you manage the file outside the repo:
+# cp /opt/inkcredible-pens/deploy/Caddyfile /etc/caddy/Caddyfile
+systemctl enable --now caddy
+systemctl reload caddy
+```
 
 Forward the real client IP (Caddy does this by default with `reverse_proxy`). Set `TRUST_PROXY=1` on Node.
 
 **Option 2 — Cloudflare Tunnel** from the LXC to Cloudflare (no open ports on your router). Point the tunnel public hostname to `http://127.0.0.1:80` (Caddy) or directly to `http://127.0.0.1:4242` if you terminate TLS at Cloudflare and proxy API+static appropriately. With Tunnel → Node, keep `TRUST_PROXY=1`.
 
-SPA note: configure the web server so unknown paths fall back to `index.html` (React Router).
+SPA note: the shipped Caddyfile uses `try_files` so unknown paths fall back to `index.html` (React Router).
 
 ---
 

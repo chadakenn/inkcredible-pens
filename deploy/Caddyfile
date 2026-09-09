@@ -1,0 +1,38 @@
+# TLS is automatic with Caddy when DNS for inkcrediblepens.org points here
+# (A/AAAA to this host, or Cloudflare Full/strict to the origin).
+
+www.inkcrediblepens.org {
+	redir https://inkcrediblepens.org{uri} permanent
+}
+
+inkcrediblepens.org {
+	# Basic shop-oriented security headers
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Allow Stripe.js / Checkout on this origin
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://api.stripe.com; frame-src https://js.stripe.com https://hooks.stripe.com; object-src 'none'; base-uri 'self'"
+		# Remove identifying server header
+		-Server
+	}
+
+	# API → Node (Express on localhost)
+	handle /api/* {
+		reverse_proxy 127.0.0.1:4242
+	}
+
+	# All uploads via Node so custom art stays admin-auth protected
+	# (products are public; custom returns 401 without admin session)
+	handle /uploads/* {
+		reverse_proxy 127.0.0.1:4242
+	}
+
+	# React SPA from vite build; unknown paths → index.html
+	handle {
+		root * /opt/inkcredible-pens/dist
+		try_files {path} /index.html
+		file_server
+	}
+}

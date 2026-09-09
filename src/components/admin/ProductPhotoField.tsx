@@ -27,7 +27,7 @@ export default function ProductPhotoField({
     if (!value) setLinkDraft('')
   }, [value])
 
-  const useFile = async (file?: File) => {
+  const handleFile = async (file?: File) => {
     if (!file) return
     setBusy(true)
     setPhotoError(null)
@@ -62,7 +62,7 @@ export default function ProductPhotoField({
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setDragging(false)
-    void useFile(event.dataTransfer.files[0])
+    void handleFile(event.dataTransfer.files[0])
   }
 
   const applyLink = () => {
@@ -167,7 +167,7 @@ export default function ProductPhotoField({
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif"
         className="sr-only"
-        onChange={(event) => void useFile(event.target.files?.[0])}
+        onChange={(event) => void handleFile(event.target.files?.[0])}
       />
 
       <div className="mt-5 border-t border-line pt-4">
