@@ -10,8 +10,11 @@ const STATE_FILE = path.join(EMAIL_DIR, 'email-state.json')
 
 const API_KEY = String(process.env.RESEND_API_KEY || '').trim()
 const FROM_EMAIL = String(process.env.ORDER_FROM_EMAIL || '').trim()
-const OWNER_EMAIL = String(process.env.ORDER_NOTIFICATION_EMAIL || '').trim()
-const REPLY_TO = String(process.env.ORDER_REPLY_TO || OWNER_EMAIL || '').trim()
+const OWNER_EMAILS = String(process.env.ORDER_NOTIFICATION_EMAILS || process.env.ORDER_NOTIFICATION_EMAIL || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter((value, index, values) => validEmail(value) && values.indexOf(value) === index)
+const REPLY_TO = String(process.env.ORDER_REPLY_TO || OWNER_EMAILS[0] || '').trim()
 const STORE_ORIGIN = String(process.env.ORIGIN || '').trim().replace(/\/$/, '')
 const SEND_EXISTING = String(process.env.EMAIL_SEND_EXISTING_ORDERS || '') === '1'
 const POLL_SECONDS = Math.min(300, Math.max(5, Math.round(Number(process.env.EMAIL_POLL_SECONDS) || 15)))
@@ -180,6 +183,29 @@ function customerMessage(order) {
   }
 }
 
+function trackingUrl(carrier, trackingNumber) {
+  const number = encodeURIComponent(clean(trackingNumber, 120))
+  const key = clean(carrier, 30).toLowerCase()
+  if (key === 'usps') return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${number}`
+  if (key === 'ups') return `https://www.ups.com/track?tracknum=${number}`
+  if (key === 'fedex') return `https://www.fedex.com/fedextrack/?trknbr=${number}`
+  return `https://www.google.com/search?q=${encodeURIComponent(`${carrier || ''} ${trackingNumber}`.trim())}`
+}
+
+function shipmentMessage(order) {
+  const customer = order.customer && typeof order.customer === 'object' ? order.customer : {}
+  const code = orderCode(order)
+  const carrier = clean(order.trackingCarrier || 'Carrier', 40)
+  const number = clean(order.trackingNumber, 120)
+  const url = trackingUrl(carrier, number)
+  const firstName = clean(customer.name, 80).split(' ')[0]
+  return {
+    subject: `Your Inkcredible Pens order has shipped • ${code}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,Helvetica,sans-serif;"><div style="max-width:680px;margin:0 auto;padding:32px 18px;"><div style="border-top:4px solid #26d9ff;background:#121216;border-radius:16px;padding:28px;"><div style="font-size:12px;letter-spacing:2px;color:#ff3ea5;font-weight:700;">INKCREDIBLE PENS</div><h1 style="margin:8px 0 4px;font-size:30px;">Your order is on the way 📦</h1><p style="color:#aaaab3;">${firstName ? `Hey ${esc(firstName)}, your` : 'Your'} order has shipped.</p><div style="background:#0d0d10;border:1px solid #2b2b31;border-radius:12px;padding:16px;margin:20px 0;"><strong>Order:</strong> ${esc(code)}<br><strong>Carrier:</strong> ${esc(carrier)}<br><strong>Tracking number:</strong> ${esc(number)}</div><p><a href="${esc(url)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:999px;">Track your package</a></p><p style="margin-top:26px;color:#aaaab3;">Questions? Reply to this email and include your order code.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\nYour order is on the way!\n\nOrder: ${code}\nCarrier: ${carrier}\nTracking number: ${number}\n\nTrack your package: ${url}\n\nQuestions? Reply to this email and include your order code.`,
+  }
+}
+
 async function sendEmail({ to, subject, html, text, idempotencyKey }) {
   const payload = { from: FROM_EMAIL, to: [to], subject: clean(subject, 240), html, text }
   if (REPLY_TO) payload.reply_to = REPLY_TO
@@ -285,8 +311,11 @@ async function runOnce() {
         const now = new Date().toISOString()
         for (const order of orders) {
           state.orders[order.id] = {
-            owner: { skippedAt: now, reason: 'preexisting_order' },
             customer: { skippedAt: now, reason: 'preexisting_order' },
+            ...(order.trackingNumber ? { shipment: { skippedAt: now, reason: 'preexisting_tracking' } } : {}),
+          }
+          for (const index of OWNER_EMAILS.keys()) {
+            state.orders[order.id][`owner_${index + 1}`] = { skippedAt: now, reason: 'preexisting_order' }
           }
         }
         writeState(state)
@@ -297,7 +326,11 @@ async function runOnce() {
     }
 
     for (const order of [...orders].reverse()) {
-      if (OWNER_EMAIL) await attempt(state, order, 'owner', OWNER_EMAIL, ownerMessage)
+      if (OWNER_EMAILS.length) {
+        for (const [index, email] of OWNER_EMAILS.entries()) {
+          await attempt(state, order, `owner_${index + 1}`, email, ownerMessage)
+        }
+      }
       else {
         const record = deliveryRecord(state, order.id, 'owner')
         if (!record.sentAt && !record.skippedAt) {
@@ -307,6 +340,9 @@ async function runOnce() {
         }
       }
       await attempt(state, order, 'customer', String(order.customer?.email || '').trim(), customerMessage)
+      if (order.trackingNumber) {
+        await attempt(state, order, 'shipment', String(order.customer?.email || '').trim(), shipmentMessage)
+      }
     }
   } catch (err) {
     console.error('[email] worker cycle failed', err)
@@ -315,6 +351,6 @@ async function runOnce() {
   }
 }
 
-console.log(`[email] worker started (poll=${POLL_SECONDS}s, from=${FROM_EMAIL || 'not configured'}, owner=${OWNER_EMAIL ? 'configured' : 'not configured'}, sendExisting=${SEND_EXISTING})`)
+console.log(`[email] worker started (poll=${POLL_SECONDS}s, from=${FROM_EMAIL || 'not configured'}, owners=${OWNER_EMAILS.length}, sendExisting=${SEND_EXISTING})`)
 await runOnce()
 setInterval(() => { void runOnce() }, POLL_MS)
