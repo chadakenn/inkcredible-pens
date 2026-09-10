@@ -6,6 +6,8 @@ Inkcredible Pens can send two emails after a paid Stripe order is persisted:
 2. A customer confirmation with the order code, items, total paid, and shipping address.
 3. A customer shipping confirmation with carrier, tracking number, and a tracking link after tracking is saved in Store Manager.
 
+New orders receive a short customer-facing code in the form `IP-YYMMDD-####`. The full Stripe session ID remains stored internally for payment matching and duplicate protection.
+
 Email delivery runs in a separate Node worker (`server/email-worker.mjs`). The Stripe webhook and order write do not wait on Resend, so an email outage cannot prevent a paid order from being saved.
 
 ## Resend setup
