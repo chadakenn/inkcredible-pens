@@ -135,7 +135,16 @@ function totals(order) {
 }
 
 function orderCode(order) {
-  return clean(order.id || order.stripeSessionId || 'order', 260)
+  if (order.displayCode) return clean(order.displayCode, 40)
+  const created = new Date(order.createdAt || 0)
+  const date = Number.isFinite(created.getTime())
+    ? `${String(created.getUTCFullYear()).slice(-2)}${String(created.getUTCMonth() + 1).padStart(2, '0')}${String(created.getUTCDate()).padStart(2, '0')}`
+    : 'ORDER'
+  let hash = 0
+  for (const char of String(order.id || order.stripeSessionId || 'order')) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  }
+  return `IP-${date}-${String(hash % 10000).padStart(4, '0')}`
 }
 
 function itemsHtml(rows) {
