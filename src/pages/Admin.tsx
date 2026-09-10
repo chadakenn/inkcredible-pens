@@ -88,6 +88,13 @@ function parseTab(raw: string | null): AdminTab {
   return 'products'
 }
 
+type ProductTypeFilter = 'All' | Category
+
+function parseProductType(raw: string | null): ProductTypeFilter {
+  if (raw && (CATEGORIES as readonly string[]).includes(raw)) return raw as Category
+  return 'All'
+}
+
 const emptyForm = (): NewProductInput => ({
   name: '',
   price: 6,
@@ -102,6 +109,7 @@ export default function Admin() {
   useDocumentTitle('Admin')
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = parseTab(searchParams.get('tab'))
+  const productType = parseProductType(searchParams.get('type'))
 
   const products = useCatalog((s) => s.products)
   const addProduct = useCatalog((s) => s.addProduct)
@@ -148,7 +156,7 @@ export default function Admin() {
   const [usingDefaultPin, setUsingDefaultPin] = useState(true)
   const showToast = useCart((s) => s.showToast)
 
-  const filteredProducts = useMemo(() => {
+  const searchMatchedProducts = useMemo(() => {
     const q = productQuery.trim().toLowerCase()
     if (!q) return products
     return products.filter((p) => {
@@ -156,6 +164,39 @@ export default function Admin() {
       return hay.includes(q)
     })
   }, [products, productQuery])
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<ProductTypeFilter, number> = {
+      All: searchMatchedProducts.length,
+      Pens: 0,
+      Stickers: 0,
+      'Car Freshies': 0,
+      Canvas: 0,
+      Custom: 0,
+    }
+    for (const p of searchMatchedProducts) {
+      counts[p.category] += 1
+    }
+    return counts
+  }, [searchMatchedProducts])
+
+  const filteredProducts = useMemo(() => {
+    const list =
+      productType === 'All'
+        ? searchMatchedProducts
+        : searchMatchedProducts.filter((p) => p.category === productType)
+    return [...list].sort((a, b) => a.name.localeCompare(b.name))
+  }, [searchMatchedProducts, productType])
+
+  const productSections = useMemo(() => {
+    if (productType !== 'All') {
+      return [{ category: productType, items: filteredProducts }]
+    }
+    return CATEGORIES.map((category) => ({
+      category,
+      items: filteredProducts.filter((p) => p.category === category),
+    })).filter((section) => section.items.length > 0)
+  }, [filteredProducts, productType])
 
 
   useEffect(() => {
@@ -184,7 +225,23 @@ export default function Admin() {
   }, [])
 
   const setTab = (next: AdminTab) => {
-    setSearchParams({ tab: next }, { replace: true })
+    const nextParams = new URLSearchParams()
+    nextParams.set('tab', next)
+    if (next === 'products' && productType !== 'All') {
+      nextParams.set('type', productType)
+    }
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  const setProductType = (next: ProductTypeFilter) => {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('tab', 'products')
+    if (next === 'All') {
+      nextParams.delete('type')
+    } else {
+      nextParams.set('type', next)
+    }
+    setSearchParams(nextParams, { replace: true })
   }
 
   const unlock = () => {
@@ -295,6 +352,7 @@ export default function Admin() {
         price: Number(form.price),
       })
       setJustAdded(created.name)
+      setProductType(created.category)
       setForm(emptyForm())
       setShowForm(false)
       window.setTimeout(() => setJustAdded(null), 2500)
@@ -318,6 +376,7 @@ export default function Admin() {
       imageUrl: product.imageUrl ?? '',
       inventoryQuantity: product.inventoryQuantity ?? null,
     })
+    setProductType(product.category)
     setEditSaveError(null)
     setConfirmDeleteId(null)
   }
@@ -923,7 +982,7 @@ export default function Admin() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <h2 className="font-display text-2xl text-cream">
                 Products in the shop ({filteredProducts.length}
-                {productQuery.trim() ? ` of ${products.length}` : ''})
+                {productQuery.trim() || productType !== 'All' ? ` of ${products.length}` : ''})
               </h2>
               <label className="relative block w-full sm:max-w-xs">
                 <span className="sr-only">Search products</span>
@@ -937,108 +996,163 @@ export default function Admin() {
                 />
               </label>
             </div>
-            {productQuery.trim() && filteredProducts.length === 0 ? (
+
+            <div
+              role="group"
+              aria-label="Filter by product type"
+              className="mt-4 flex flex-wrap gap-2"
+            >
+              {(['All', ...CATEGORIES] as ProductTypeFilter[]).map((type) => {
+                const on = productType === type
+                const count = typeCounts[type]
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setProductType(type)}
+                    aria-pressed={on}
+                    className={`inline-flex min-h-12 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold transition active:scale-[0.98] sm:text-base ${
+                      on
+                        ? 'bg-cream text-ink'
+                        : 'border border-line bg-ink text-mute hover:text-cream'
+                    }`}
+                  >
+                    <span>{type}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-extrabold ${
+                        on ? 'bg-ink/15 text-ink' : 'bg-ink-2 text-mute'
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {filteredProducts.length === 0 ? (
               <p className="mt-4 rounded-2xl border border-dashed border-line bg-ink px-4 py-8 text-center text-sm text-mute">
-                No products match “{productQuery.trim()}”.
+                {productQuery.trim()
+                  ? `No products match “${productQuery.trim()}”${productType !== 'All' ? ` in ${productType}` : ''}.`
+                  : productType !== 'All'
+                    ? `No ${productType} in the shop yet.`
+                    : 'No products in the shop yet.'}
               </p>
             ) : null}
-            <ul className="mt-4 space-y-3">
-              {filteredProducts.map((p) => (
-                <li
-                  key={p.id}
-                  className={`rounded-2xl border p-4 sm:p-5 ${
-                    editForm?.id === p.id
-                      ? 'border-cyan/50 bg-ink-2'
-                      : 'border-line bg-ink-2'
-                  }`}
-                >
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                      {p.imageUrl ? (
-                        <img
-                          src={p.imageUrl}
-                          alt=""
-                          className="h-14 w-14 shrink-0 rounded-xl border border-line bg-white object-cover"
-                        />
-                      ) : null}
-                      <div className="min-w-0">
-                        <p className="text-xs font-extrabold uppercase tracking-wider text-mute">
-                          {p.category}
-                        </p>
-                        <p className="font-display text-xl leading-snug text-cream">{p.name}</p>
-                        <p className="mt-1 text-lg font-extrabold text-lime">
-                          ${p.price.toFixed(2)}
-                        </p>
-                        <p className={`mt-1 text-xs font-extrabold ${p.inventoryQuantity === 0 ? 'text-pink' : 'text-cyan'}`}>
-                          {p.inventoryQuantity == null ? 'Made to order' : p.inventoryQuantity === 0 ? 'Sold out' : `${p.inventoryQuantity} available`}
-                        </p>
-                      </div>
-                    </div>
-                    {confirmDeleteId === p.id ? (
-                      <div className="w-full rounded-xl border border-pink/40 bg-ink p-3 sm:w-auto sm:min-w-[14rem]">
-                        <p className="mb-2 text-sm font-bold text-cream">Are you sure?</p>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void removeProduct(p.id)
-                                .then(() => {
-                                  setConfirmDeleteId(null)
-                                  if (editForm?.id === p.id) {
-                                    setEditForm(null)
-                                    setEditSaveError(null)
-                                  }
-                                })
-                                .catch((error) => {
-                                  setConfirmDeleteId(null)
-                                  setEditSaveError(
-                                    error instanceof Error && error.message
-                                      ? error.message
-                                      : 'Could not delete product on server.',
-                                  )
-                                })
-                            }}
-                            className="min-h-12 flex-1 rounded-xl bg-pink px-3 text-sm font-extrabold text-white"
-                          >
-                            Yes, delete
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="min-h-12 flex-1 rounded-xl border border-line bg-ink-2 px-3 text-sm font-extrabold text-cream"
-                          >
-                            No
-                          </button>
+
+            <div className="mt-4 space-y-6">
+              {productSections.map(({ category, items }) => (
+                <section key={category} aria-label={category}>
+                  {productType === 'All' ? (
+                    <h3 className="sticky top-16 z-10 -mx-1 mb-3 rounded-xl border border-line/80 bg-ink/95 px-3 py-2.5 backdrop-blur-xl sm:top-[4.5rem]">
+                      <span className="font-display text-lg text-cream sm:text-xl">
+                        {category}
+                      </span>
+                      <span className="ml-2 text-sm font-extrabold text-mute">
+                        ({items.length})
+                      </span>
+                    </h3>
+                  ) : null}
+                  <ul className="space-y-3">
+                    {items.map((p) => (
+                      <li
+                        key={p.id}
+                        className={`rounded-2xl border p-4 sm:p-5 ${
+                          editForm?.id === p.id
+                            ? 'border-cyan/50 bg-ink-2'
+                            : 'border-line bg-ink-2'
+                        }`}
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex min-w-0 items-start gap-3">
+                            {p.imageUrl ? (
+                              <img
+                                src={p.imageUrl}
+                                alt=""
+                                className="h-14 w-14 shrink-0 rounded-xl border border-line bg-white object-cover"
+                              />
+                            ) : null}
+                            <div className="min-w-0">
+                              <p className="text-xs font-extrabold uppercase tracking-wider text-mute">
+                                {p.category}
+                              </p>
+                              <p className="font-display text-xl leading-snug text-cream">{p.name}</p>
+                              <p className="mt-1 text-lg font-extrabold text-lime">
+                                ${p.price.toFixed(2)}
+                              </p>
+                              <p className={`mt-1 text-xs font-extrabold ${p.inventoryQuantity === 0 ? 'text-pink' : 'text-cyan'}`}>
+                                {p.inventoryQuantity == null ? 'Made to order' : p.inventoryQuantity === 0 ? 'Sold out' : `${p.inventoryQuantity} available`}
+                              </p>
+                            </div>
+                          </div>
+                          {confirmDeleteId === p.id ? (
+                            <div className="w-full rounded-xl border border-pink/40 bg-ink p-3 sm:w-auto sm:min-w-[14rem]">
+                              <p className="mb-2 text-sm font-bold text-cream">Are you sure?</p>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void removeProduct(p.id)
+                                      .then(() => {
+                                        setConfirmDeleteId(null)
+                                        if (editForm?.id === p.id) {
+                                          setEditForm(null)
+                                          setEditSaveError(null)
+                                        }
+                                      })
+                                      .catch((error) => {
+                                        setConfirmDeleteId(null)
+                                        setEditSaveError(
+                                          error instanceof Error && error.message
+                                            ? error.message
+                                            : 'Could not delete product on server.',
+                                        )
+                                      })
+                                  }}
+                                  className="min-h-12 flex-1 rounded-xl bg-pink px-3 text-sm font-extrabold text-white"
+                                >
+                                  Yes, delete
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="min-h-12 flex-1 rounded-xl border border-line bg-ink-2 px-3 text-sm font-extrabold text-cream"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  startEditingProduct(p)
+                                  setShowForm(false)
+                                  setPhotoSaveError(null)
+                                }}
+                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line bg-ink px-4 text-base font-extrabold text-cream transition hover:border-cyan/50 active:scale-[0.98]"
+                              >
+                                <Pencil className="h-4 w-4 text-cyan" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(p.id)}
+                                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-pink/90 px-4 text-base font-extrabold text-white transition hover:bg-pink active:scale-[0.98]"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            startEditingProduct(p)
-                            setShowForm(false)
-                            setPhotoSaveError(null)
-                          }}
-                          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line bg-ink px-4 text-base font-extrabold text-cream transition hover:border-cyan/50 active:scale-[0.98]"
-                        >
-                          <Pencil className="h-4 w-4 text-cyan" />
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(p.id)}
-                          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-pink/90 px-4 text-base font-extrabold text-white transition hover:bg-pink active:scale-[0.98]"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </li>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           </div>
         </div>
       )}
