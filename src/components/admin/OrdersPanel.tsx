@@ -177,7 +177,7 @@ function OrderCard({
               <br />
               {order.customer.city}, {order.customer.state} {order.customer.zip}
             </p>
-            <p className="mt-2 text-[11px] text-mute">Order ID: {order.id}</p>
+            <p className="mt-2 text-[11px] text-mute">Order code: {order.displayCode || order.id}</p>
           </div>
 
           <ul className="space-y-2">
