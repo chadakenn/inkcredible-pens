@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Car, Mail, PenLine, Sparkles, Sticker, Wand2 } from 'lucide-react'
+import { ArrowRight, Car, Frame, Mail, PenLine, Sparkles, Sticker, Wand2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useCatalog } from '../store/catalog'
 import LogoMark from './LogoMark'
@@ -46,6 +46,16 @@ const shopPaths: {
     Icon: Car,
   },
   {
+    id: 'canvas',
+    title: 'Canvas',
+    blurb: 'Bold wall art, ready to hang',
+    accent: 'from-cream to-lavender',
+    chip: 'bg-cream text-ink',
+    to: '/canvas',
+    category: 'Canvas',
+    Icon: Frame,
+  },
+  {
     id: 'custom',
     title: 'Custom studio',
     blurb: 'Logo stickers, banners & canvas',
@@ -87,7 +97,7 @@ export default function Hero() {
               <br />
               <span className="text-gradient">Stickers that slap.</span>
               <br />
-              Freshies with attitude.
+              Freshies &amp; canvas with attitude.
             </h1>
             <p className="max-w-xl text-[0.95rem] leading-relaxed text-mute sm:text-base">
               Handmade with Humor. Backed by Heart. Fueled by Real Life. Shop the catalog —
@@ -110,7 +120,7 @@ export default function Hero() {
             <div className="relative overflow-hidden rounded-[1.75rem] border-4 border-cyan checker-md p-1 shadow-[0_0_40px_rgba(34,211,238,0.22)]">
               <div className="flex flex-col items-center rounded-[1.4rem] bg-ink/90 p-5 backdrop-blur-sm sm:p-6">
                 <LogoMark size="xl" />
-                <p className="mt-4 text-sm font-bold text-mute">Pens · Stickers · Freshies</p>
+                <p className="mt-4 text-sm font-bold text-mute">Pens · Stickers · Freshies · Canvas</p>
                 <div className="mt-3 flex flex-wrap justify-center gap-2">
                   {['$6 pens', 'Vinyl', 'Handmade', 'Custom'].map((tag, i) => (
                     <span
@@ -131,7 +141,7 @@ export default function Hero() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {shopPaths.map((c, i) => {
             const count = counts[c.category] ?? 0
             const Icon = c.Icon
@@ -174,6 +184,7 @@ export default function Hero() {
                 'Pens',
                 'Stickers',
                 'Car Freshies',
+                'Canvas',
                 'Custom studio',
                 'Mystery Packs',
                 'Faith Stickers',

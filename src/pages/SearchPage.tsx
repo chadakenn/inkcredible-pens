@@ -72,7 +72,7 @@ export default function SearchPage() {
         <p className="text-xs font-extrabold uppercase tracking-wider text-cyan">Search</p>
         <h1 className="font-display text-3xl sm:text-4xl">Find the goods</h1>
         <p className="mt-1 max-w-lg text-sm text-mute">
-          Hunt across pens, stickers, freshies &amp; custom — by name or vibe.
+          Hunt across pens, stickers, freshies, canvas &amp; custom — by name or vibe.
         </p>
       </div>
 

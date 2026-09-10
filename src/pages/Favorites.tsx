@@ -49,7 +49,7 @@ export default function Favorites() {
           </div>
           <p className="mt-4 font-display text-xl text-cream">No favorites yet</p>
           <p className="mx-auto mt-2 max-w-sm text-sm text-mute">
-            Heart pens, stickers, or freshies while you browse — they&apos;ll show up here.
+            Heart pens, stickers, freshies, or canvas while you browse — they&apos;ll show up here.
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
             <Link to="/pens" className="btn-primary min-h-11">

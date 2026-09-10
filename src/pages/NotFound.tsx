@@ -16,7 +16,7 @@ export default function NotFound() {
         This page ghosted us
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-mute sm:text-base">
-        No pens, stickers, or freshies live at this URL. Either it never existed, or it wandered
+        No pens, stickers, freshies, or canvas live at this URL. Either it never existed, or it wandered
         off mid-sarcasm. Let’s get you back to the good stuff.
       </p>
       <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
@@ -29,6 +29,25 @@ export default function NotFound() {
         <Link to="/search" className="btn-ghost min-h-11">
           <Search className="h-4 w-4 text-cyan" /> Search
         </Link>
+      </div>
+      <div className="mt-6 flex flex-wrap justify-center gap-2">
+        {(
+          [
+            ['Pens', '/pens'],
+            ['Stickers', '/stickers'],
+            ['Freshies', '/freshies'],
+            ['Canvas', '/canvas'],
+            ['Custom', '/custom'],
+          ] as const
+        ).map(([label, to]) => (
+          <Link
+            key={to}
+            to={to}
+            className="rounded-full border border-line bg-ink-2 px-3 py-1.5 text-xs font-extrabold text-cream transition hover:border-cyan/50 hover:text-cyan"
+          >
+            {label}
+          </Link>
+        ))}
       </div>
     </section>
   )
