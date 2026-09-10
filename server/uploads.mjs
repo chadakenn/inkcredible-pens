@@ -2,6 +2,7 @@
  * Artwork + product photo uploads.
  * - Customer artwork: uploads/custom/ — UUID names, magic-byte verified, admin-only download
  * - Product photos: uploads/products/ — public storefront assets
+ * - Social photos: uploads/social/ — public, expiring assets for social posting tools
  */
 import multer from 'multer'
 import { randomUUID } from 'node:crypto'
@@ -28,14 +29,17 @@ import { CHECKOUTS_DIR } from './checkouts.mjs'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CUSTOM_UPLOAD_DIR = path.resolve(__dirname, '../uploads/custom')
 export const PRODUCT_UPLOAD_DIR = path.resolve(__dirname, '../uploads/products')
+export const SOCIAL_UPLOAD_DIR = path.resolve(__dirname, '../uploads/social')
 /** @deprecated use CUSTOM_UPLOAD_DIR */
 export const UPLOAD_DIR = CUSTOM_UPLOAD_DIR
 
 const MAX_CUSTOM_BYTES = 12 * 1024 * 1024
 const MAX_PRODUCT_BYTES = 8 * 1024 * 1024
+export const MAX_SOCIAL_BYTES = 8 * 1024 * 1024
 
 mkdirSync(CUSTOM_UPLOAD_DIR, { recursive: true })
 mkdirSync(PRODUCT_UPLOAD_DIR, { recursive: true })
+mkdirSync(SOCIAL_UPLOAD_DIR, { recursive: true })
 
 const customUploadLimit = createRateLimiter({
   windowMs: 15 * 60 * 1000,
@@ -81,6 +85,15 @@ function writeVerifiedBuffer(dir, buf) {
 export function saveProductImageBuffer(buf) {
   const saved = writeVerifiedBuffer(PRODUCT_UPLOAD_DIR, buf)
   return { ...saved, url: `/uploads/products/${saved.filename}` }
+}
+
+/** Save a verified public image for a social-network publishing tool. */
+export function saveSocialImageBuffer(buf) {
+  if (!Buffer.isBuffer(buf) || !buf.length || buf.length > MAX_SOCIAL_BYTES) {
+    throw Object.assign(new Error('invalid_image_size'), { code: 'invalid_image_size' })
+  }
+  const saved = writeVerifiedBuffer(SOCIAL_UPLOAD_DIR, buf)
+  return { ...saved, url: `/uploads/social/${saved.filename}` }
 }
 
 /**
@@ -233,6 +246,26 @@ export function mountUploads(app) {
       /* ignore */
     }
     res.setHeader('Cache-Control', 'public, max-age=86400')
+    return res.sendFile(filePath)
+  })
+
+  // Public by design: Facebook downloads this URL after an authenticated MCP upload.
+  app.get('/uploads/social/:name', (req, res) => {
+    const name = path.basename(String(req.params.name || ''))
+    if (!/^[a-f0-9-]{36}\.(jpe?g|png|webp|gif)$/i.test(name)) {
+      return res.status(400).send('Bad request')
+    }
+    const filePath = path.join(SOCIAL_UPLOAD_DIR, name)
+    if (!existsSync(filePath)) return res.status(404).send('Not found')
+    try {
+      const detected = detectImageType(readFileSync(filePath))
+      if (!detected) return res.status(404).send('Not found')
+      res.type(detected.mime)
+    } catch {
+      return res.status(404).send('Not found')
+    }
+    res.setHeader('Cache-Control', 'public, max-age=86400')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
     return res.sendFile(filePath)
   })
 }
@@ -455,6 +488,32 @@ export function cleanupAbandonedCustomUploads(maxAgeMs = 7 * 24 * 60 * 60 * 1000
   return { removed, scanned, keptReferenced }
 }
 
+/** Delete expired public social images. They are staging assets, not permanent records. */
+export function cleanupExpiredSocialUploads(maxAgeMs = 30 * 24 * 60 * 60 * 1000) {
+  const now = Date.now()
+  let removed = 0
+  let scanned = 0
+  try {
+    const files = readdirSync(SOCIAL_UPLOAD_DIR).filter((f) =>
+      /^[a-f0-9-]{36}\.(jpe?g|png|webp|gif)$/i.test(f),
+    )
+    for (const f of files) {
+      scanned += 1
+      const full = path.join(SOCIAL_UPLOAD_DIR, f)
+      try {
+        if (now - statSync(full).mtimeMs < maxAgeMs) continue
+        unlinkSync(full)
+        removed += 1
+      } catch (err) {
+        console.error('[uploads] social cleanup skip', f, err)
+      }
+    }
+  } catch (err) {
+    console.error('[uploads] social cleanup failed', err)
+  }
+  return { removed, scanned }
+}
+
 /**
  * Run retention cleanup once and on an interval (default daily).
  * Env: UPLOAD_RETENTION_DAYS (default 7), CHECKOUT_RETENTION_DAYS (default 7).
@@ -464,6 +523,8 @@ export function startRetentionJobs({ cleanupCheckouts } = {}) {
   const checkoutDays = Math.max(1, Number(process.env.CHECKOUT_RETENTION_DAYS) || 7)
   const uploadMs = uploadDays * 24 * 60 * 60 * 1000
   const checkoutMs = checkoutDays * 24 * 60 * 60 * 1000
+  const socialDays = Math.max(1, Number(process.env.SOCIAL_UPLOAD_RETENTION_DAYS) || 30)
+  const socialMs = socialDays * 24 * 60 * 60 * 1000
 
   const run = () => {
     const u = cleanupAbandonedCustomUploads(uploadMs)
@@ -474,6 +535,10 @@ export function startRetentionJobs({ cleanupCheckouts } = {}) {
     const p = cleanupOrphanProductUploads(0)
     console.log(
       `[retention] product photos: removed=${p.removed} scanned=${p.scanned} keptReferenced=${p.keptReferenced}`,
+    )
+    const s = cleanupExpiredSocialUploads(socialMs)
+    console.log(
+      `[retention] social uploads: removed=${s.removed} scanned=${s.scanned} (age>${socialDays}d)`,
     )
     if (typeof cleanupCheckouts === 'function') {
       const c = cleanupCheckouts(checkoutMs)

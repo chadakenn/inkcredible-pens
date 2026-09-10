@@ -16,6 +16,7 @@ import {
 import {
   deleteProductUploadIfUnreferenced,
   saveProductImageBuffer,
+  saveSocialImageBuffer,
 } from './uploads.mjs'
 import { readJsonFile, writeJsonAtomic } from './security.mjs'
 
@@ -352,6 +353,26 @@ export function createListingsMcpServer(actor) {
     draft.imageUrl = saved.url
     saveDraft(draft)
     return result({ draft, photo: { url: saved.url, mime: saved.mime, size: saved.size } })
+  })
+
+  server.registerTool('host_social_image', {
+    title: 'Host an image for a social post',
+    description: 'Upload a generated JPEG, PNG, WebP, or GIF and return a public HTTPS URL that Facebook can download. Supply raw base64 only, without a data URL prefix. Maximum decoded size is 8 MB. The hosted staging image expires automatically.',
+    inputSchema: {
+      imageBase64: z.string().min(16),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  }, async ({ imageBase64 }) => {
+    const clean = imageBase64.replace(/\s/g, '')
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(clean)) throw new Error('invalid_base64')
+    const buffer = Buffer.from(clean, 'base64')
+    const saved = saveSocialImageBuffer(buffer)
+    const url = `${config().publicOrigin}${saved.url}`
+    return result({
+      image: { url, mime: saved.mime, size: saved.size },
+      expiresAfterDays: Math.max(1, Number(process.env.SOCIAL_UPLOAD_RETENTION_DAYS) || 30),
+      hostedBy: actor.email,
+    }, `Image hosted for social publishing: ${url}`)
   })
 
   server.registerTool('replace_live_listing_photo', {

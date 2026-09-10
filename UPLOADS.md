@@ -50,6 +50,23 @@ Cart/checkout may keep a short-lived client data URL for preview; durable print 
 
 Store Manager **Product photo** field uploads through this API.
 
+## Social-post staging images
+
+The OAuth-protected Listings MCP tool `host_social_image` accepts a raw base64 JPEG, PNG,
+WebP, or GIF (maximum 8 MB) and returns a complete public HTTPS URL. An assistant can pass
+that URL to Facebook's photo-post action. The public file contains only the staged image;
+uploading it requires an authenticated, allowlisted Listings connection.
+
+- Directory: `uploads/social/` (persistent, gitignored)
+- Public URL: `/uploads/social/<uuid>.<ext>`
+- Retention: `SOCIAL_UPLOAD_RETENTION_DAYS` (default 30 days)
+- Validation: file signature/magic bytes; SVG is rejected
+
+The assistant must actually be capable of transferring the generated image as base64 to
+the MCP tool. If its client cannot expose generated-image bytes to tools, use its native
+file-hosting/Composio upload action instead; a public endpoint cannot retrieve a private
+client-session image by itself.
+
 ## Shared orders
 
 Orders are also stored on this Express server. See [ORDERS.md](./ORDERS.md) — persist `data/orders/` on Proxmox.

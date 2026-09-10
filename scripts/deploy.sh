@@ -18,12 +18,12 @@ if [[ ! -f package.json ]]; then
 fi
 
 ensure_sacred_dirs() {
-  mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
+  mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products uploads/social
   if id "$APP_USER" >/dev/null 2>&1; then
     chown -R "$APP_USER:$APP_GROUP" data uploads 2>/dev/null || \
       sudo chown -R "$APP_USER:$APP_GROUP" data uploads
     chmod 750 data data/orders data/catalog data/admin data/checkouts uploads/custom 2>/dev/null || true
-    chmod 755 uploads uploads/products 2>/dev/null || true
+    chmod 755 uploads uploads/products uploads/social 2>/dev/null || true
     if [[ -f .env ]]; then
       chown "$APP_USER:$APP_GROUP" .env 2>/dev/null || sudo chown "$APP_USER:$APP_GROUP" .env || true
       chmod 640 .env 2>/dev/null || true
@@ -76,7 +76,7 @@ else
 fi
 
 echo "==> Sacred paths still present:"
-ls -ld data data/orders data/catalog data/admin data/checkouts uploads uploads/custom uploads/products 2>/dev/null || true
+ls -ld data data/orders data/catalog data/admin data/checkouts uploads uploads/custom uploads/products uploads/social 2>/dev/null || true
 [[ -f .env ]] && echo "    .env OK" || echo "    .env MISSING"
 
 echo "==> Done. Spot-check https://YOUR_DOMAIN , Orders, and uploads."

@@ -14,7 +14,8 @@
 │   └── checkouts/        # pending Stripe checkouts (gitignored)
 ├── uploads/              # SACRED (owner: inkcredible)
 │   ├── custom/           # customer print files (admin-only serve)
-│   └── products/         # public storefront photos
+│   ├── products/         # public storefront photos
+│   └── social/           # public, expiring social-post staging images
 ├── .env                  # SACRED — never in git (mode 640, group inkcredible)
 └── package.json
 ```
@@ -94,10 +95,10 @@ chmod 640 /opt/inkcredible-pens/.env
 7. Ensure data dirs exist with correct ownership (systemd runs as `inkcredible` — mismatched `www-data` causes EACCES on first order/upload):
 
 ```bash
-mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products
+mkdir -p data/orders data/catalog data/admin data/checkouts uploads/custom uploads/products uploads/social
 chown -R inkcredible:inkcredible data uploads
 chmod 750 data data/orders data/catalog data/admin data/checkouts uploads/custom
-chmod 755 uploads uploads/products   # products may be read via the app; still owned by inkcredible
+chmod 755 uploads uploads/products uploads/social # public assets; still owned by inkcredible
 # Optional: bind-mount these from a Proxmox volume/dataset
 ```
 
