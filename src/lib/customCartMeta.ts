@@ -23,6 +23,11 @@ export function formatCustomCartMeta(custom: CustomLogoMeta | undefined): string
   if (custom.style) {
     return formatLogoCartMeta(custom.style, custom.cut, custom.stickerQty, custom.stickerSizeId ?? custom.stickerSize)
   }
+  if (custom.selectedOptions) {
+    return Object.entries(custom.selectedOptions)
+      .map(([name, value]) => `${name}: ${value}`)
+      .join(' · ')
+  }
   return null
 }
 

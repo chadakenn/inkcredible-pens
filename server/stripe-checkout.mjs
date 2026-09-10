@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { mountUploads, startRetentionJobs } from './uploads.mjs'
 import { mountOrders, createPaidOrder, findOrderByStripeSession } from './orders.mjs'
 import { mountTracking, startTrackingPoll } from './tracking.mjs'
-import { mountCatalog } from './catalog.mjs'
+import { mountCatalog, readProducts, writeProducts } from './catalog.mjs'
 import { mountScents } from './scents.mjs'
 import { mountListingsMcp } from './listings-mcp.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
@@ -345,6 +345,21 @@ function customerFromStripeSession(session, fallback) {
   }
 }
 
+function decrementTrackedInventory(lines) {
+  const products = readProducts()
+  let changed = false
+  for (const line of Array.isArray(lines) ? lines : []) {
+    const catalogId = String(line.catalogId || line.custom?.catalogId || line.productId || '')
+      .split('__scent__')[0]
+      .split('__option__')[0]
+    const product = products.find((item) => item.id === catalogId)
+    if (!product || !Number.isInteger(product.inventoryQuantity)) continue
+    product.inventoryQuantity = Math.max(0, product.inventoryQuantity - Math.max(1, Number(line.quantity) || 1))
+    changed = true
+  }
+  if (changed) writeProducts(products)
+}
+
 function fulfillCheckoutSession(session) {
   const sessionId = session.id
 
@@ -391,7 +406,7 @@ function fulfillCheckoutSession(session) {
   // Stripe finalized shipping/customer wins; pending checkout is fallback only.
   const customer = customerFromStripeSession(session, pending.customer)
 
-  const { order } = createPaidOrder({
+  const { order, created } = createPaidOrder({
     id: `stripe-${sessionId}`,
     stripeSessionId: sessionId,
     checkoutId: pending.id,
@@ -403,6 +418,8 @@ function fulfillCheckoutSession(session) {
     status: 'new',
     paid: true,
   })
+
+  if (created) decrementTrackedInventory(lines)
 
   markCheckoutCompleted(pending.id, {
     orderId: order.id,

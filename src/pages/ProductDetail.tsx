@@ -33,6 +33,8 @@ export default function ProductDetail() {
   const [scentNudge, setScentNudge] = useState(false)
   const [zoomOpen, setZoomOpen] = useState(false)
   const [shareFlash, setShareFlash] = useState(false)
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({})
+  const [optionNudge, setOptionNudge] = useState(false)
 
   const product = useMemo(
     () => products.find((p) => p.id === id) ?? null,
@@ -49,6 +51,7 @@ export default function ProductDetail() {
   }, [products, product])
 
   const isFreshie = product?.category === 'Car Freshies'
+  const soldOut = product?.inventoryQuantity === 0
 
   useDocumentTitle(product?.name ?? (id ? 'Product' : 'Not found'))
 
@@ -83,9 +86,20 @@ export default function ProductDetail() {
   }
 
   const catPath = CATEGORY_PATH[product.category] ?? '/shop'
-  const addDisabled = isFreshie && scents.length === 0
+  const missingRequiredOption = (product.optionGroups || []).some(
+    (group) => group.required && !selectedOptions[group.name],
+  )
+  const selectedPrice = (product.optionGroups || []).reduce((sum, group) => {
+    const value = group.values.find((item) => item.label === selectedOptions[group.name])
+    return sum + (value?.priceAdjustment || 0)
+  }, product.price)
+  const addDisabled = soldOut || (isFreshie && scents.length === 0)
 
   const onAdd = () => {
+    if (missingRequiredOption) {
+      setOptionNudge(true)
+      return
+    }
     if (isFreshie) {
       if (!scent.trim()) {
         setScentNudge(true)
@@ -97,7 +111,7 @@ export default function ProductDetail() {
       })
       return
     }
-    addItem(product, qty)
+    addItem(product, qty, { selectedOptions })
   }
 
   const onShare = async () => {
@@ -140,7 +154,7 @@ export default function ProductDetail() {
       <button
         type="button"
         className="inline-flex min-h-11 min-w-11 items-center justify-center p-2.5 text-mute hover:text-cream"
-        onClick={() => setQty((q) => q + 1)}
+        onClick={() => setQty((q) => product.inventoryQuantity == null ? q + 1 : Math.min(q + 1, product.inventoryQuantity))}
         aria-label="Increase quantity"
       >
         <Plus className="h-4 w-4" />
@@ -221,13 +235,31 @@ export default function ProductDetail() {
             </h1>
             <p className="mt-2 text-mute">{product.tagline}</p>
             <p className="mt-4 font-display text-3xl text-lime">
-              ${product.price.toFixed(2)}
+              ${selectedPrice.toFixed(2)}
             </p>
           </div>
 
           <p className="text-sm leading-relaxed text-mute sm:text-base">
             {product.description}
           </p>
+
+          {(product.optionGroups || []).map((group) => (
+            <div key={group.name} className={`rounded-3xl border p-4 sm:p-5 ${optionNudge && group.required && !selectedOptions[group.name] ? 'border-pink/50 bg-pink/5' : 'border-line bg-ink-2'}`}>
+              <h2 className="font-display text-xl text-cream">Choose {group.name}</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {group.values.map((value) => {
+                  const selected = selectedOptions[group.name] === value.label
+                  return (
+                    <button key={value.label} type="button" onClick={() => { setSelectedOptions((current) => ({ ...current, [group.name]: value.label })); setOptionNudge(false) }} className={`min-h-12 rounded-full px-4 text-sm font-extrabold ${selected ? 'bg-lime text-ink' : 'border border-line bg-ink text-cream hover:border-cyan/50'}`}>
+                      {value.label}{value.priceAdjustment ? ` (${value.priceAdjustment > 0 ? '+' : '-'}$${Math.abs(value.priceAdjustment).toFixed(2)})` : ''}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+          {optionNudge && missingRequiredOption ? <p className="text-sm font-bold text-pink">Choose the required options before adding to cart.</p> : null}
+          {product.inventoryQuantity != null ? <p className={`text-sm font-extrabold ${soldOut ? 'text-pink' : 'text-cyan'}`}>{soldOut ? 'Sold out' : `${product.inventoryQuantity} available`}</p> : null}
 
           {isFreshie && (
             <div
@@ -334,7 +366,7 @@ export default function ProductDetail() {
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-ink/95 px-4 py-3 backdrop-blur-xl sm:hidden pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-6xl items-center gap-2">
           <p className="mr-auto min-w-0 truncate font-display text-lg text-lime">
-            ${product.price.toFixed(2)}
+            ${selectedPrice.toFixed(2)}
           </p>
           {qtyControl}
           <button
@@ -343,7 +375,7 @@ export default function ProductDetail() {
             onClick={onAdd}
             disabled={addDisabled}
           >
-            Add{isFreshie && scent ? ` · ${scent}` : ''}
+            {soldOut ? 'Sold out' : `Add${isFreshie && scent ? ` · ${scent}` : ''}`}
           </button>
         </div>
       </div>

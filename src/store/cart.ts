@@ -11,6 +11,7 @@ export interface CartItem {
 export interface AddItemOptions {
   freshieScent?: string
   freshieNote?: string
+  selectedOptions?: Record<string, string>
 }
 
 interface CartState {
@@ -51,15 +52,29 @@ function withFreshieMeta(
 ): Product {
   const scent = options?.freshieScent?.trim()
   const note = options?.freshieNote?.trim()
-  if (!scent && !note) return product
-  const baseId = product.id.includes('__scent__')
-    ? product.id.split('__scent__')[0]
-    : product.id
+  const selectedOptions = options?.selectedOptions
+  if (!scent && !note && !selectedOptions) return product
+  const baseId = product.id.split('__scent__')[0].split('__option__')[0]
+  const optionKey = selectedOptions
+    ? Object.entries(selectedOptions)
+        .map(([key, value]) => `${key}-${value}`)
+        .join('-')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .slice(0, 100)
+    : ''
+  const adjustedPrice = (product.optionGroups || []).reduce((sum, group) => {
+    const selected = selectedOptions?.[group.name]
+    const value = group.values.find((item) => item.label === selected)
+    return sum + (value?.priceAdjustment || 0)
+  }, product.price)
   return {
     ...product,
-    id: scent ? `${baseId}__scent__${scentSlug(scent)}` : product.id,
+    id: scent ? `${baseId}__scent__${scentSlug(scent)}` : optionKey ? `${baseId}__option__${optionKey}` : product.id,
+    price: adjustedPrice,
     custom: {
       ...product.custom,
+      ...(selectedOptions ? { selectedOptions, catalogId: baseId } : {}),
       ...(scent ? { freshieScent: scent } : {}),
       ...(note ? { freshieNote: note } : { freshieNote: undefined }),
     },
@@ -80,10 +95,13 @@ export const useCart = create<CartState>()(
       addItem: (product, qty = 1, options) =>
         set((s) => {
           const lineProduct = withFreshieMeta(product, options)
+          const available = lineProduct.inventoryQuantity
+          const safeQty = available == null ? qty : Math.min(qty, available)
+          if (safeQty <= 0) return { ...s, toast: 'This item is sold out' }
           // Custom logo lines always get their own cart row (unique ids expected)
           if (isLogoCustomLine(lineProduct)) {
             return {
-              items: [...s.items, { product: lineProduct, qty }],
+              items: [...s.items, { product: lineProduct, qty: safeQty }],
               isOpen: true,
               toast: 'Added to cart',
             }
@@ -93,7 +111,7 @@ export const useCart = create<CartState>()(
             return {
               items: s.items.map((i) =>
                 i.product.id === lineProduct.id
-                  ? { ...i, qty: i.qty + qty }
+                  ? { ...i, qty: available == null ? i.qty + safeQty : Math.min(i.qty + safeQty, available) }
                   : i,
               ),
               isOpen: true,
@@ -101,7 +119,7 @@ export const useCart = create<CartState>()(
             }
           }
           return {
-            items: [...s.items, { product: lineProduct, qty }],
+            items: [...s.items, { product: lineProduct, qty: safeQty }],
             isOpen: true,
             toast: 'Added to cart',
           }
@@ -115,7 +133,9 @@ export const useCart = create<CartState>()(
           }
           return {
             items: s.items.map((i) =>
-              i.product.id === id ? { ...i, qty } : i,
+              i.product.id === id
+                ? { ...i, qty: i.product.inventoryQuantity == null ? qty : Math.min(qty, i.product.inventoryQuantity) }
+                : i,
             ),
           }
         }),

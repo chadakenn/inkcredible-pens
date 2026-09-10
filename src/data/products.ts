@@ -47,6 +47,21 @@ export interface CustomLogoMeta {
   cardNotes?: string
   /** Transparent estimate pricing (not an official quote) */
   estimateOnly?: boolean
+  /** Generic catalog listing choices, such as Size or Color. */
+  selectedOptions?: Record<string, string>
+  /** Original live catalog id when a cart row has a variant-specific id. */
+  catalogId?: string
+}
+
+export interface ProductOptionValue {
+  label: string
+  priceAdjustment: number
+}
+
+export interface ProductOptionGroup {
+  name: string
+  required: boolean
+  values: ProductOptionValue[]
 }
 
 export interface Product {
@@ -60,6 +75,9 @@ export interface Product {
   badge?: string
   art: 'pen' | 'sticker' | 'freshie' | 'resin' | 'badge' | 'pack' | 'skin'
   imageUrl?: string
+  /** Missing means made to order; zero means sold out. */
+  inventoryQuantity?: number
+  optionGroups?: ProductOptionGroup[]
   /** Present on synthetic custom logo sticker cart lines */
   custom?: CustomLogoMeta
 }

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "stripe:server": "node server/stripe-checkout.mjs",
     "test:tracking": "node scripts/test-tracking.mjs",
-    "test:product-upload-retention": "node scripts/test-product-upload-retention.mjs"
+    "test:product-upload-retention": "node scripts/test-product-upload-retention.mjs",
+    "test:catalog-management": "node scripts/test-catalog-management.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

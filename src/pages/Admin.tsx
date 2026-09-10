@@ -54,6 +54,7 @@ interface ProductEditForm {
   price: number
   category: Category
   imageUrl: string
+  inventoryQuantity: number | null
 }
 
 function isQuotaError(error: unknown): boolean {
@@ -305,6 +306,7 @@ export default function Admin() {
       price: product.price,
       category: product.category,
       imageUrl: product.imageUrl ?? '',
+      inventoryQuantity: product.inventoryQuantity ?? null,
     })
     setEditSaveError(null)
     setConfirmDeleteId(null)
@@ -325,6 +327,7 @@ export default function Admin() {
         price: Number(editForm.price),
         category: editForm.category,
         imageUrl: editForm.imageUrl.trim() || undefined,
+        inventoryQuantity: editForm.inventoryQuantity,
       })
       setJustEdited(name)
       setEditForm(null)
@@ -635,6 +638,13 @@ export default function Admin() {
 
               <label className="block">
                 <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
+                  Quantity available <span className="font-normal">(leave blank for made to order)</span>
+                </span>
+                <input type="number" min={0} step={1} value={form.inventoryQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, inventoryQuantity: e.target.value === '' ? undefined : Math.max(0, Math.floor(Number(e.target.value))) }))} placeholder="Made to order" className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
                   Price (dollars)
                 </span>
                 <input
@@ -857,6 +867,13 @@ export default function Admin() {
                 </div>
               </fieldset>
 
+              <label className="block">
+                <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
+                  Quantity available <span className="font-normal">(blank = made to order)</span>
+                </span>
+                <input type="number" min={0} step={1} value={editForm.inventoryQuantity ?? ''} onChange={(e) => setEditForm((f) => f ? { ...f, inventoryQuantity: e.target.value === '' ? null : Math.max(0, Math.floor(Number(e.target.value))) } : f)} placeholder="Made to order" className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              </label>
+
               <ProductPhotoField
                 value={editForm.imageUrl ?? ''}
                 onChange={(imageUrl) => {
@@ -938,6 +955,9 @@ export default function Admin() {
                         <p className="font-display text-xl leading-snug text-cream">{p.name}</p>
                         <p className="mt-1 text-lg font-extrabold text-lime">
                           ${p.price.toFixed(2)}
+                        </p>
+                        <p className={`mt-1 text-xs font-extrabold ${p.inventoryQuantity === 0 ? 'text-pink' : 'text-cyan'}`}>
+                          {p.inventoryQuantity == null ? 'Made to order' : p.inventoryQuantity === 0 ? 'Sold out' : `${p.inventoryQuantity} available`}
                         </p>
                       </div>
                     </div>

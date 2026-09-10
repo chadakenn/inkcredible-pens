@@ -14,10 +14,12 @@ export default function ProductCard({ product }: { product: Product }) {
   const to = configuratorPath ?? `/product/${product.id}`
   const needsScent = product.category === 'Car Freshies'
   const needsConfigure = Boolean(configuratorPath)
+  const hasOptions = Boolean(product.optionGroups?.length)
+  const soldOut = product.inventoryQuantity === 0
   const [addedFlash, setAddedFlash] = useState(false)
 
   const onAdd = () => {
-    if (needsScent || needsConfigure) {
+    if (needsScent || needsConfigure || hasOptions) {
       navigate(to)
       return
     }
@@ -66,7 +68,7 @@ export default function ProductCard({ product }: { product: Product }) {
             </h3>
           </div>
           <p className="shrink-0 pt-0.5 font-display text-lg text-lime">
-            ${product.price.toFixed(2)}
+            {hasOptions ? 'From ' : ''}${product.price.toFixed(2)}
           </p>
         </div>
         <p className="text-sm text-mute line-clamp-2">{product.tagline}</p>
@@ -76,6 +78,10 @@ export default function ProductCard({ product }: { product: Product }) {
         {needsConfigure && (
           <p className="text-[11px] font-bold text-lavender">Configure pack →</p>
         )}
+        {hasOptions && !needsConfigure && (
+          <p className="text-[11px] font-bold text-lavender">Choose options on details →</p>
+        )}
+        {soldOut && <p className="text-[11px] font-extrabold text-pink">Sold out</p>}
         <div className="mt-auto flex gap-2 pt-1">
           <Link to={to} className="btn-ghost min-h-11 flex-1 !px-3 !py-2.5 text-sm text-center">
             Details
@@ -83,6 +89,7 @@ export default function ProductCard({ product }: { product: Product }) {
           <button
             type="button"
             onClick={onAdd}
+            disabled={soldOut}
             className={`btn-primary min-h-11 !px-3 !py-2.5 text-sm transition ${
               addedFlash ? 'add-success-flash' : ''
             }`}
@@ -102,7 +109,7 @@ export default function ProductCard({ product }: { product: Product }) {
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                {needsScent ? 'Scent' : needsConfigure ? 'Configure' : 'Add'}
+                {soldOut ? 'Sold out' : needsScent ? 'Scent' : needsConfigure || hasOptions ? 'Configure' : 'Add'}
               </>
             )}
           </button>

@@ -35,6 +35,40 @@ const ART_TYPES = new Set([
   "skin",
 ])
 
+function normalizeOptionGroups(value, errors) {
+  if (value == null) return undefined
+  if (!Array.isArray(value) || value.length > 5) {
+    errors.push("invalid_optionGroups")
+    return undefined
+  }
+  const groups = []
+  const groupNames = new Set()
+  for (const rawGroup of value) {
+    const name = String(rawGroup?.name || "").trim().slice(0, 60)
+    const key = name.toLowerCase()
+    if (!name || groupNames.has(key) || !Array.isArray(rawGroup?.values) || rawGroup.values.length < 1 || rawGroup.values.length > 30) {
+      errors.push("invalid_optionGroups")
+      return undefined
+    }
+    groupNames.add(key)
+    const labels = new Set()
+    const values = []
+    for (const rawValue of rawGroup.values) {
+      const label = String(rawValue?.label || "").trim().slice(0, 80)
+      const labelKey = label.toLowerCase()
+      const priceAdjustment = Number(rawValue?.priceAdjustment ?? 0)
+      if (!label || labels.has(labelKey) || !Number.isFinite(priceAdjustment) || Math.abs(priceAdjustment) > 100000) {
+        errors.push("invalid_optionGroups")
+        return undefined
+      }
+      labels.add(labelKey)
+      values.push({ label, priceAdjustment: Math.round(priceAdjustment * 100) / 100 })
+    }
+    groups.push({ name, required: rawGroup?.required !== false, values })
+  }
+  return groups.length ? groups : undefined
+}
+
 mkdirSync(CATALOG_DIR, { recursive: true })
 
 export function newProductId(name) {
@@ -176,6 +210,21 @@ export function validateProductShape(body, { partial = false } = {}) {
       }
     }
   }
+  if (Object.prototype.hasOwnProperty.call(body, "inventoryQuantity")) {
+    if (body.inventoryQuantity == null || body.inventoryQuantity === "") {
+      out.inventoryQuantity = undefined
+    } else {
+      const quantity = Number(body.inventoryQuantity)
+      if (!Number.isInteger(quantity) || quantity < 0 || quantity > 1000000) {
+        errors.push("invalid_inventoryQuantity")
+      } else {
+        out.inventoryQuantity = quantity
+      }
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "optionGroups")) {
+    out.optionGroups = normalizeOptionGroups(body.optionGroups, errors)
+  }
 
   return { errors, out }
 }
@@ -258,6 +307,8 @@ export function mountCatalog(app) {
     }
     if (out.badge !== undefined) product.badge = out.badge
     if (out.imageUrl !== undefined) product.imageUrl = out.imageUrl
+    if (out.inventoryQuantity !== undefined) product.inventoryQuantity = out.inventoryQuantity
+    if (out.optionGroups !== undefined) product.optionGroups = out.optionGroups
 
     products.unshift(product)
     writeAtomic(products)

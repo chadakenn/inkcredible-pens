@@ -239,6 +239,7 @@ function catalogProductById(id) {
 function baseCatalogId(productId) {
   const id = String(productId || '')
   if (id.includes('__scent__')) return id.split('__scent__')[0]
+  if (id.includes('__option__')) return id.split('__option__')[0]
   return id
 }
 
@@ -337,7 +338,7 @@ export function priceCartLine(raw) {
     }
   }
 
-  const catalogId = baseCatalogId(productId)
+  const catalogId = String(config?.catalogId || baseCatalogId(productId))
   const product = catalogProductById(catalogId)
   if (!product) {
     throw Object.assign(new Error(`unknown_product:${catalogId}`), {
@@ -345,7 +346,29 @@ export function priceCartLine(raw) {
       productId: catalogId,
     })
   }
-  const unitAmountCents = dollarsToCents(product.price)
+  const selectedOptions = config?.selectedOptions && typeof config.selectedOptions === 'object'
+    ? config.selectedOptions : {}
+  let optionAdjustment = 0
+  const normalizedSelections = {}
+  for (const group of Array.isArray(product.optionGroups) ? product.optionGroups : []) {
+    const selected = selectedOptions[group.name]
+    if (!selected && group.required !== false) {
+      throw Object.assign(new Error(`missing_option:${group.name}`), { code: 'missing_option' })
+    }
+    if (!selected) continue
+    const choice = Array.isArray(group.values)
+      ? group.values.find((value) => value.label === selected)
+      : null
+    if (!choice) {
+      throw Object.assign(new Error(`invalid_option:${group.name}`), { code: 'invalid_option' })
+    }
+    normalizedSelections[group.name] = choice.label
+    optionAdjustment += Number(choice.priceAdjustment) || 0
+  }
+  if (Number.isInteger(product.inventoryQuantity) && product.inventoryQuantity < quantity) {
+    throw Object.assign(new Error(`insufficient_inventory:${catalogId}`), { code: 'insufficient_inventory' })
+  }
+  const unitAmountCents = dollarsToCents(Number(product.price) + optionAdjustment)
   if (!Number.isFinite(unitAmountCents) || unitAmountCents < 1) {
     throw Object.assign(new Error(`invalid_catalog_price:${catalogId}`), {
       code: 'invalid_catalog_price',
@@ -362,12 +385,19 @@ export function priceCartLine(raw) {
   const customOut = {}
   if (scent) customOut.freshieScent = scent
   if (config?.freshieNote) customOut.freshieNote = String(config.freshieNote).slice(0, 500)
+  if (Object.keys(normalizedSelections).length) {
+    customOut.selectedOptions = normalizedSelections
+    customOut.catalogId = catalogId
+  }
 
   return {
     productId,
     catalogId,
     name: String(product.name || 'Item'),
-    description: scent ? `Scent: ${scent}` : undefined,
+    description: [
+      scent ? `Scent: ${scent}` : '',
+      ...Object.entries(normalizedSelections).map(([name, value]) => `${name}: ${value}`),
+    ].filter(Boolean).join(' · ') || undefined,
     quantity,
     unitAmountCents,
     amountCents: unitAmountCents,

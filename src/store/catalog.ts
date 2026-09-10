@@ -23,6 +23,8 @@ export interface NewProductInput {
   tagline?: string
   description?: string
   imageUrl?: string
+  inventoryQuantity?: number
+  optionGroups?: Product['optionGroups']
   art: ArtPick
 }
 
@@ -33,7 +35,7 @@ interface CatalogState {
   hydrateFromApi: () => Promise<void>
   addProduct: (input: NewProductInput) => Promise<Product>
   removeProduct: (id: string) => Promise<void>
-  updateProduct: (id: string, patch: Partial<Omit<Product, 'id'>>) => Promise<void>
+  updateProduct: (id: string, patch: import('../lib/catalogApi').PatchProductBody) => Promise<void>
   resetToDefaults: () => Promise<void>
 }
 
@@ -99,6 +101,8 @@ export const useCatalog = create<CatalogState>()(
           accent: pickAccent(input.category, get().products.length),
           art: input.art,
           imageUrl: input.imageUrl?.trim() || undefined,
+          inventoryQuantity: input.inventoryQuantity,
+          optionGroups: input.optionGroups,
         }
         try {
           const product = await apiCreateProduct(payload)

@@ -111,7 +111,9 @@ export async function createProduct(body: CreateProductBody): Promise<Product> {
   return data.product
 }
 
-export type PatchProductBody = Partial<Omit<Product, 'id'>>
+export type PatchProductBody = Partial<Omit<Product, 'id' | 'inventoryQuantity'>> & {
+  inventoryQuantity?: number | null
+}
 
 export async function patchProduct(
   id: string,

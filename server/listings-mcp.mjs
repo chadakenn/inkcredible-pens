@@ -27,6 +27,14 @@ const DEFAULT_ALLOWED = [
 ]
 const CATEGORIES = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
 const ART_TYPES = ['pen', 'sticker', 'freshie', 'resin', 'badge', 'pack', 'skin']
+const OPTION_GROUPS_SCHEMA = z.array(z.object({
+  name: z.string().min(1).max(60),
+  required: z.boolean().optional(),
+  values: z.array(z.object({
+    label: z.string().min(1).max(80),
+    priceAdjustment: z.number().min(-100000).max(100000).optional(),
+  })).min(1).max(30),
+})).max(5)
 
 mkdirSync(DRAFT_DIR, { recursive: true })
 
@@ -127,6 +135,17 @@ function ownedDraft(id, owner) {
   return draft
 }
 
+function publicPhotoUrl(imageUrl) {
+  if (!imageUrl) return null
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl
+  return `${config().publicOrigin}${String(imageUrl).startsWith('/') ? '' : '/'}${imageUrl}`
+}
+
+function removeDraft(draft) {
+  unlinkSync(draftPath(draft.id))
+  if (draft.imageUrl) deleteProductUploadIfUnreferenced(draft.imageUrl, readProducts())
+}
+
 function result(value, message) {
   return {
     content: [{ type: 'text', text: message || JSON.stringify(value, null, 2) }],
@@ -172,7 +191,93 @@ export function createListingsMcpServer(actor) {
     description: 'List unpublished drafts belonging to the signed-in user.',
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
-  }, async () => result({ drafts: listDrafts(actor.email) }))
+  }, async () => result({ drafts: listDrafts(actor.email).map((draft) => ({
+    ...draft,
+    photoUrl: publicPhotoUrl(draft.imageUrl),
+    hasPhoto: Boolean(draft.imageUrl),
+  })) }))
+
+  server.registerTool('preview_listing_draft', {
+    title: 'Preview a listing draft',
+    description: 'Show the complete unpublished draft plus an absolute product-photo preview URL and readiness checks.',
+    inputSchema: { draftId: z.string().uuid() },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ draftId }) => {
+    const draft = ownedDraft(draftId, actor.email)
+    const photoUrl = publicPhotoUrl(draft.imageUrl)
+    const checks = {
+      hasTitle: Boolean(draft.name),
+      hasPrice: Number(draft.price) > 0,
+      hasCategory: CATEGORIES.includes(draft.category),
+      hasDescription: Boolean(draft.description),
+      hasPhoto: Boolean(photoUrl),
+    }
+    return result({ draft, photoUrl, checks, readyToPublish: Object.values(checks).every(Boolean) })
+  })
+
+  server.registerTool('delete_listing_draft', {
+    title: 'Delete an unpublished listing draft',
+    description: 'Permanently delete one unpublished draft and its unreferenced uploaded photo. Requires explicit confirmation.',
+    inputSchema: { draftId: z.string().uuid(), confirmed: z.literal(true) },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  }, async ({ draftId }) => {
+    const draft = ownedDraft(draftId, actor.email)
+    removeDraft(draft)
+    return result({ deletedDraft: draftId, deletedBy: actor.email }, `Draft ${draftId} was deleted.`)
+  })
+
+  server.registerTool('cleanup_old_listing_drafts', {
+    title: 'Clean up old unpublished drafts',
+    description: 'Delete the signed-in user\'s drafts at least the requested number of days old, including unreferenced photos. Requires explicit confirmation.',
+    inputSchema: {
+      olderThanDays: z.number().int().min(1).max(3650).default(30),
+      confirmed: z.literal(true),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  }, async ({ olderThanDays }) => {
+    const cutoff = Date.now() - olderThanDays * 86400000
+    const old = listDrafts(actor.email).filter((draft) => {
+      const stamp = Date.parse(draft.updatedAt || draft.createdAt || '')
+      return Number.isFinite(stamp) && stamp <= cutoff
+    })
+    old.forEach(removeDraft)
+    return result({ deletedCount: old.length, deletedDraftIds: old.map((draft) => draft.id) })
+  })
+
+  server.registerTool('inventory_summary', {
+    title: 'Show inventory summary',
+    description: 'Show tracked stock, sold-out products, and low-stock products. Listings without a quantity are treated as made to order.',
+    inputSchema: { lowStockAt: z.number().int().min(0).max(1000).default(3) },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ lowStockAt }) => {
+    const products = readProducts()
+    const tracked = products.filter((product) => Number.isInteger(product.inventoryQuantity))
+    return result({
+      trackedCount: tracked.length,
+      madeToOrderCount: products.length - tracked.length,
+      soldOut: tracked.filter((product) => product.inventoryQuantity === 0),
+      lowStock: tracked.filter((product) => product.inventoryQuantity > 0 && product.inventoryQuantity <= lowStockAt),
+    })
+  })
+
+  server.registerTool('set_listing_inventory', {
+    title: 'Set listing inventory',
+    description: 'Set exact available quantity for a live listing, or clear it to mark the listing made to order. Requires explicit confirmation.',
+    inputSchema: {
+      id: z.string().min(1).max(120),
+      inventoryQuantity: z.number().int().min(0).max(1000000).nullable(),
+      confirmed: z.literal(true),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  }, async ({ id, inventoryQuantity }) => {
+    const products = readProducts()
+    const index = products.findIndex((item) => item.id === id)
+    if (index < 0) throw new Error('listing_not_found')
+    if (inventoryQuantity == null) delete products[index].inventoryQuantity
+    else products[index].inventoryQuantity = inventoryQuantity
+    writeProducts(products)
+    return result({ product: products[index], updatedBy: actor.email })
+  })
 
   server.registerTool('create_listing_draft', {
     title: 'Create a listing draft',
@@ -187,6 +292,8 @@ export function createListingsMcpServer(actor) {
       accent: z.string().max(32).optional(),
       art: z.enum(ART_TYPES).optional(),
       imageUrl: z.string().max(2048).optional(),
+      inventoryQuantity: z.number().int().min(0).max(1000000).optional(),
+      optionGroups: OPTION_GROUPS_SCHEMA.optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   }, async (input) => {
@@ -214,6 +321,8 @@ export function createListingsMcpServer(actor) {
       accent: z.string().max(32).optional(),
       art: z.enum(ART_TYPES).optional(),
       imageUrl: z.string().max(2048).nullable().optional(),
+      inventoryQuantity: z.number().int().min(0).max(1000000).nullable().optional(),
+      optionGroups: OPTION_GROUPS_SCHEMA.nullable().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
   }, async ({ draftId, ...changes }) => {
@@ -309,6 +418,8 @@ export function createListingsMcpServer(actor) {
       accent: z.string().max(32).optional(),
       art: z.enum(ART_TYPES).optional(),
       imageUrl: z.string().max(2048).nullable().optional(),
+      inventoryQuantity: z.number().int().min(0).max(1000000).nullable().optional(),
+      optionGroups: OPTION_GROUPS_SCHEMA.nullable().optional(),
       confirmed: z.literal(true),
     },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
@@ -318,11 +429,15 @@ export function createListingsMcpServer(actor) {
     const products = readProducts()
     const index = products.findIndex((item) => item.id === id)
     if (index < 0) throw new Error('listing_not_found')
+    const previousUrl = products[index].imageUrl
     products[index] = { ...products[index], ...out }
     for (const [key, value] of Object.entries(products[index])) {
       if (value === undefined) delete products[index][key]
     }
     writeProducts(products)
+    if (previousUrl && previousUrl !== products[index].imageUrl) {
+      deleteProductUploadIfUnreferenced(previousUrl, products)
+    }
     return result({ product: products[index], updatedBy: actor.email })
   })
 
@@ -335,7 +450,9 @@ export function createListingsMcpServer(actor) {
     const products = readProducts()
     const product = products.find((item) => item.id === id)
     if (!product) throw new Error('listing_not_found')
-    writeProducts(products.filter((item) => item.id !== id))
+    const next = products.filter((item) => item.id !== id)
+    writeProducts(next)
+    if (product.imageUrl) deleteProductUploadIfUnreferenced(product.imageUrl, next)
     return result({ deleted: product, deletedBy: actor.email })
   })
 
