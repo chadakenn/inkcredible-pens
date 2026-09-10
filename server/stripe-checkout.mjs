@@ -192,7 +192,7 @@ app.get('/api/checkout/session/:id', async (req, res) => {
     return res.json({
       sessionId: id,
       status: 'paid',
-      orderId: order.id,
+      orderId: order.displayCode || order.id,
       orderStatus: order.status,
       total: order.total,
       paymentConfirmed: true,
@@ -210,7 +210,7 @@ app.get('/api/checkout/session/:id', async (req, res) => {
           return res.json({
             sessionId: id,
             status: 'paid',
-            orderId: fulfilled.id,
+            orderId: fulfilled.displayCode || fulfilled.id,
             orderStatus: fulfilled.status,
             total: fulfilled.total,
             paymentConfirmed: true,
@@ -284,7 +284,7 @@ app.get('/api/checkout-session/:id', async (req, res) => {
     return res.json({
       id,
       payment_status: 'paid',
-      orderId: order.id,
+      orderId: order.displayCode || order.id,
       orderStatus: order.status,
       amount_total: Math.round(Number(order.total) * 100),
     })
