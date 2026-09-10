@@ -2,7 +2,7 @@
 
 export const FLAT_SHIPPING_CENTS = 800
 /** Dollar threshold (matches historical cart export). */
-export const FREE_SHIPPING_THRESHOLD = 35
+export const FREE_SHIPPING_THRESHOLD = 60
 export const FREE_SHIPPING_THRESHOLD_CENTS = FREE_SHIPPING_THRESHOLD * 100
 
 /** Shipping fee in cents for a merchandise subtotal in cents. */

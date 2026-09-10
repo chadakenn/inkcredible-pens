@@ -11,7 +11,7 @@ const CATALOG_FILE = path.resolve(__dirname, '../data/catalog/products.json')
 const CATALOG_SEED = path.join(__dirname, 'catalog-seed.json')
 
 export const FLAT_SHIPPING_CENTS = 800
-export const FREE_SHIPPING_THRESHOLD_CENTS = 3500
+export const FREE_SHIPPING_THRESHOLD_CENTS = 6000
 
 export function shippingCentsForSubtotal(subtotalCents) {
   const cents = Math.max(0, Math.round(Number(subtotalCents) || 0))
