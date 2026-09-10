@@ -30,6 +30,7 @@ export interface OrderItemSnapshot {
 
 export interface Order {
   id: string
+  displayCode?: string
   createdAt: string
   customer: OrderCustomer
   items: OrderItemSnapshot[]
