@@ -10,22 +10,30 @@ Email delivery runs in a separate Node worker (`server/email-worker.mjs`). The S
 ## Resend setup
 
 1. Create a Resend account.
-2. Add and verify the sending domain `inkcrediblepens.org` in Resend. Add the DNS records Resend provides to the authoritative DNS provider for the domain.
-3. Create a Resend API key with permission to send email.
-4. Never commit that API key. Put it only in `/opt/inkcredible-pens/.env` on the server.
+2. In Resend, add and verify the sending domain `inkcredible.kennedyshome.com`.
+3. Add the DNS records Resend provides to the DNS provider that manages `kennedyshome.com`.
+4. Wait until Resend shows the domain as verified.
+5. Create a Resend API key with permission to send email.
+6. Never commit that API key. Put it only in `/opt/inkcredible-pens/.env` on the server.
 
 Recommended production values:
 
 ```dotenv
 RESEND_API_KEY=re_your_real_key_here
-ORDER_FROM_EMAIL=Inkcredible Pens <orders@inkcrediblepens.org>
+ORDER_FROM_EMAIL=Inkcredible Pens <orders@inkcredible.kennedyshome.com>
 ORDER_NOTIFICATION_EMAIL=inkcredible.pens@gmail.com
 ORDER_REPLY_TO=inkcredible.pens@gmail.com
 EMAIL_POLL_SECONDS=15
 EMAIL_SEND_EXISTING_ORDERS=0
 ```
 
-`ORDER_FROM_EMAIL` must use a sender/domain accepted by Resend. During initial Resend testing, use whatever verified sender/domain Resend permits, then switch to `orders@inkcrediblepens.org` after domain verification.
+### Do I need to create an orders mailbox?
+
+No. You do **not** need to create an inbox or email account for `orders@inkcredible.kennedyshome.com`. It is the From address that Resend uses after the domain is verified.
+
+Customer replies are directed to `ORDER_REPLY_TO`, which is set to `inkcredible.pens@gmail.com`. That existing Gmail inbox receives the replies.
+
+`ORDER_FROM_EMAIL` must use the domain accepted by Resend. During initial testing, use the sender Resend permits. After `inkcredible.kennedyshome.com` is verified, use `Inkcredible Pens <orders@inkcredible.kennedyshome.com>`.
 
 ## First deployment on Proxmox
 
@@ -135,7 +143,7 @@ If the worker says email is disabled, check that `RESEND_API_KEY` and `ORDER_FRO
 systemctl restart inkcredible-email
 ```
 
-If Resend rejects the sender, verify the domain/sender in Resend and make sure `ORDER_FROM_EMAIL` exactly matches an allowed sender.
+If Resend rejects the sender, verify `inkcredible.kennedyshome.com` in Resend and make sure `ORDER_FROM_EMAIL` exactly matches an allowed sender.
 
 If a customer email is skipped, verify the paid order contains a valid `customer.email`.
 
