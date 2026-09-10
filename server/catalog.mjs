@@ -37,7 +37,7 @@ const ART_TYPES = new Set([
 
 mkdirSync(CATALOG_DIR, { recursive: true })
 
-function newProductId(name) {
+export function newProductId(name) {
   const base = String(name || "product")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -77,7 +77,7 @@ function ensureCatalogFile() {
   }
 }
 
-function readProducts() {
+export function readProducts() {
   ensureCatalogFile()
   const data = readJsonFile(CATALOG_FILE)
   if (data == null) return []
@@ -87,9 +87,12 @@ function readProducts() {
   throw new CorruptJsonError(CATALOG_FILE, new Error("unexpected_shape"))
 }
 
-function writeAtomic(products) {
+export function writeProducts(products) {
   writeJsonAtomic(CATALOG_FILE, products, { keepBackups: 5 })
 }
+
+// Backwards-compatible internal name used by the HTTP routes below.
+const writeAtomic = writeProducts
 
 function handleCorrupt(res, err) {
   if (err instanceof CorruptJsonError || err?.code === "corrupt_json") {
@@ -99,7 +102,7 @@ function handleCorrupt(res, err) {
   throw err
 }
 
-function validateProductShape(body, { partial = false } = {}) {
+export function validateProductShape(body, { partial = false } = {}) {
   const errors = []
   const out = {}
 

@@ -1,5 +1,12 @@
 # React + TypeScript + Vite
 
+Inkcredible Pens shop application. Deployment and integration guides:
+
+- [DEPLOY.md](./DEPLOY.md) — server deployment
+- [EMAIL.md](./EMAIL.md) — order and shipping email worker
+- [TRACKING.md](./TRACKING.md) — optional automatic delivery checks
+- [AUTH0-LISTINGS.md](./AUTH0-LISTINGS.md) — private Chad/Kellie ChatGPT listing workflow
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

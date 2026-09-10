@@ -14,6 +14,7 @@ import { mountOrders, createPaidOrder, findOrderByStripeSession } from './orders
 import { mountTracking, startTrackingPoll } from './tracking.mjs'
 import { mountCatalog } from './catalog.mjs'
 import { mountScents } from './scents.mjs'
+import { mountListingsMcp } from './listings-mcp.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { priceCart } from './pricing.mjs'
 import {
@@ -170,6 +171,7 @@ mountOrders(app)
 mountTracking(app)
 mountCatalog(app)
 mountScents(app)
+mountListingsMcp(app)
 
 app.get('/api/health', (_req, res) => {
   res.json({

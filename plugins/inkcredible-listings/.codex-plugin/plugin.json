@@ -1,0 +1,19 @@
+{
+  "name": "inkcredible-listings",
+  "version": "0.1.0",
+  "description": "Private, confirmation-first product listing workflow for Inkcredible Pens",
+  "author": {
+    "name": "Inkcredible Pens"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Inkcredible Listings",
+    "shortDescription": "Draft and publish store listings.",
+    "longDescription": "Create listing drafts from product photos, review copy and pricing, then publish to the Inkcredible Pens storefront after confirmation.",
+    "developerName": "Inkcredible Pens",
+    "category": "Developer Tools",
+    "capabilities": [],
+    "defaultPrompt": "Help me draft an Inkcredible Pens listing. Never publish until I explicitly confirm the final title, price, category, description, and photo."
+  },
+  "mcpServers": "./.mcp.json"
+}

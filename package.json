@@ -12,14 +12,17 @@
     "test:tracking": "node scripts/test-tracking.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "jose": "^6.2.12",
     "lucide-react": "^1.43.0",
     "multer": "^2.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3",
     "stripe": "^22.6.1",
+    "zod": "^4.6.1",
     "zustand": "^5.0.15"
   },
   "devDependencies": {

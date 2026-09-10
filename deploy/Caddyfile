@@ -23,6 +23,14 @@ inkcrediblepens.org {
 		reverse_proxy 127.0.0.1:4242
 	}
 
+	# Private ChatGPT listing workflow (OAuth protected)
+	handle /mcp* {
+		reverse_proxy 127.0.0.1:4242
+	}
+	handle /.well-known/oauth-protected-resource* {
+		reverse_proxy 127.0.0.1:4242
+	}
+
 	# All uploads via Node so custom art stays admin-auth protected
 	# (products are public; custom returns 401 without admin session)
 	handle /uploads/* {

@@ -77,6 +77,12 @@ function writeVerifiedBuffer(dir, buf) {
   return { filename, mime: detected.mime, size: buf.length, path: dest }
 }
 
+/** Save a verified storefront product image from trusted server-side callers. */
+export function saveProductImageBuffer(buf) {
+  const saved = writeVerifiedBuffer(PRODUCT_UPLOAD_DIR, buf)
+  return { ...saved, url: `/uploads/products/${saved.filename}` }
+}
+
 /**
  * @param {import('express').Express} app
  */

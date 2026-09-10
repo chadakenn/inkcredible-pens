@@ -81,6 +81,9 @@ ADMIN_PIN=....                  # REQUIRED strong PIN — NOT 1234 (boot refuses
 # TRACK17_API_KEY=...          # optional — package watch; see TRACKING.md
 # TRACKING_POLL_MINUTES=45
 # CHECKOUT_RETENTION_DAYS=7
+# AUTH0_ISSUER_BASE_URL=https://YOUR-TENANT.us.auth0.com # optional ChatGPT listings
+# AUTH0_AUDIENCE=https://inkcredible.kennedyshome.com/mcp
+# LISTING_ALLOWED_EMAILS=chadakennedy86@gmail.com,kelliekennedy81@gmail.com
 ```
 
 ```bash

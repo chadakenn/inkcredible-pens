@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "inkcredible-listings": {
+      "type": "http",
+      "url": "https://inkcredible.kennedyshome.com/mcp"
+    }
+  }
+}
