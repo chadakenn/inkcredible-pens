@@ -21,5 +21,6 @@ Use the Inkcredible Listings MCP tools for storefront catalog work.
 10. Treat a missing inventory quantity as made to order. Use exact quantities only when the user wants stock tracked, and confirm before setting a listing to zero.
 11. Model sizes and other choices with `optionGroups`; keep names simple (for example, Size) and explain any price adjustments in the final preview.
 12. Offer to remove abandoned drafts with `delete_listing_draft` or `cleanup_old_listing_drafts`, but never delete them without explicit confirmation.
+13. Canvas listings use the standard required Size choices unless the user explicitly asks for different pricing: 12×16 in at $35, 16×20 in at $50, and 20×32 in at $85.
 
 Drafts are private to the signed-in account. Publishing makes the product immediately visible on the storefront.

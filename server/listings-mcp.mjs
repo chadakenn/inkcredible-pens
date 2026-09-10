@@ -7,6 +7,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import * as z from 'zod/v4'
 import {
   CATALOG_DIR,
+  applyProductDefaults,
   newProductId,
   readProducts,
   validateProductShape,
@@ -300,10 +301,10 @@ export function createListingsMcpServer(actor) {
     const { errors, out } = validateProductShape(input, { partial: false })
     if (errors.length) throw new Error(errors.join(','))
     const now = new Date().toISOString()
-    const draft = saveDraft({
+    const draft = saveDraft(applyProductDefaults({
       id: randomUUID(), owner: actor.email, createdBy: actor.sub, createdAt: now,
       ...out, status: 'draft',
-    })
+    }))
     return result({ draft }, `Draft ${draft.id} saved. It is not visible on the store.`)
   })
 
@@ -330,7 +331,7 @@ export function createListingsMcpServer(actor) {
     const { errors, out } = validateProductShape(changes, { partial: true })
     if (errors.length) throw new Error(errors.join(','))
     Object.assign(draft, out)
-    return result({ draft: saveDraft(draft) })
+    return result({ draft: saveDraft(applyProductDefaults(draft)) })
   })
 
   server.registerTool('upload_listing_photo', {

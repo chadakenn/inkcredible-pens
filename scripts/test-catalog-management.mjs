@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { validateProductShape } from '../server/catalog.mjs'
+import { applyProductDefaults, validateProductShape } from '../server/catalog.mjs'
 
 const valid = validateProductShape({
   name: 'Canvas print',
@@ -29,5 +29,13 @@ assert.deepEqual(
   }, { partial: true }).errors,
   ['invalid_optionGroups'],
 )
+
+const canvas = applyProductDefaults({ name: 'Funny canvas', category: 'Canvas', price: 30 })
+assert.equal(canvas.price, 35)
+assert.deepEqual(canvas.optionGroups[0].values.map((value) => [value.label, value.priceAdjustment]), [
+  ['12×16 in', 0],
+  ['16×20 in', 15],
+  ['20×32 in', 50],
+])
 
 console.log('catalog inventory/options regression test passed')

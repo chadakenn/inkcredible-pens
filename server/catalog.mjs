@@ -35,6 +35,26 @@ const ART_TYPES = new Set([
   "skin",
 ])
 
+export const DEFAULT_CANVAS_PRICE = 35
+export const DEFAULT_CANVAS_OPTION_GROUPS = [{
+  name: "Size",
+  required: true,
+  values: [
+    { label: "12×16 in", priceAdjustment: 0 },
+    { label: "16×20 in", priceAdjustment: 15 },
+    { label: "20×32 in", priceAdjustment: 50 },
+  ],
+}]
+
+export function applyProductDefaults(product) {
+  if (!product || product.category !== "Canvas" || product.optionGroups?.length) return product
+  return {
+    ...product,
+    price: DEFAULT_CANVAS_PRICE,
+    optionGroups: structuredClone(DEFAULT_CANVAS_OPTION_GROUPS),
+  }
+}
+
 function normalizeOptionGroups(value, errors) {
   if (value == null) return undefined
   if (!Array.isArray(value) || value.length > 5) {
@@ -115,8 +135,8 @@ export function readProducts() {
   ensureCatalogFile()
   const data = readJsonFile(CATALOG_FILE)
   if (data == null) return []
-  if (Array.isArray(data)) return data
-  if (data && Array.isArray(data.products)) return data.products
+  if (Array.isArray(data)) return data.map(applyProductDefaults)
+  if (data && Array.isArray(data.products)) return data.products.map(applyProductDefaults)
   console.error("[catalog] unexpected JSON shape — refusing empty fallback")
   throw new CorruptJsonError(CATALOG_FILE, new Error("unexpected_shape"))
 }

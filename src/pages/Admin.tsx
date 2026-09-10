@@ -46,6 +46,16 @@ const ART_OPTIONS: { value: ArtPick; label: string }[] = [
   { value: 'pack', label: 'Pack' },
 ]
 
+const DEFAULT_CANVAS_OPTIONS = [{
+  name: 'Size',
+  required: true,
+  values: [
+    { label: '12×16 in', priceAdjustment: 0 },
+    { label: '16×20 in', priceAdjustment: 15 },
+    { label: '20×32 in', priceAdjustment: 50 },
+  ],
+}]
+
 type AdminTab = 'products' | 'scents' | 'orders'
 
 interface ProductEditForm {
@@ -683,6 +693,9 @@ export default function Admin() {
                             ...f,
                             category: c,
                             art: artMap[c],
+                            ...(c === 'Canvas'
+                              ? { price: 35, optionGroups: DEFAULT_CANVAS_OPTIONS }
+                              : { optionGroups: undefined }),
                           }))
                         }}
                         className={`min-h-14 rounded-2xl px-3 text-sm font-extrabold transition active:scale-[0.98] ${
