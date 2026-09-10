@@ -26,6 +26,21 @@ function newOrderId() {
   return `ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 }
 
+function newDisplayCode(orders) {
+  const now = new Date()
+  const date = [
+    String(now.getUTCFullYear()).slice(-2),
+    String(now.getUTCMonth() + 1).padStart(2, '0'),
+    String(now.getUTCDate()).padStart(2, '0'),
+  ].join('')
+  for (let tries = 0; tries < 20; tries += 1) {
+    const suffix = String(Math.floor(1000 + Math.random() * 9000))
+    const code = `IP-${date}-${suffix}`
+    if (!orders.some((order) => order.displayCode === code)) return code
+  }
+  return `IP-${date}-${Date.now().toString(36).slice(-5).toUpperCase()}`
+}
+
 function readOrders() {
   const data = readJsonFile(ORDERS_FILE)
   if (data == null) return []
@@ -117,6 +132,7 @@ export function createPaidOrder(input) {
 
   const order = {
     id,
+    displayCode: newDisplayCode(orders),
     createdAt:
       typeof input.createdAt === 'string' && input.createdAt
         ? input.createdAt
