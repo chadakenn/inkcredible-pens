@@ -61,6 +61,7 @@ export default function App() {
           <Route path="/pens" element={<CategoryPage category="Pens" />} />
           <Route path="/stickers" element={<CategoryPage category="Stickers" />} />
           <Route path="/freshies" element={<CategoryPage category="Car Freshies" />} />
+          <Route path="/canvas" element={<CategoryPage category="Canvas" />} />
           <Route path="/custom" element={<CategoryPage category="Custom" />} />
           <Route path="/custom/logo-stickers" element={<CustomLogoStickers />} />
           <Route path="/custom/banners" element={<CustomBanners />} />

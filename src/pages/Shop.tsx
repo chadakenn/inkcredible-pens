@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Car, PenLine, Sticker, Wand2 } from 'lucide-react'
+import { ArrowRight, Car, Frame, PenLine, Sticker, Wand2 } from 'lucide-react'
 import { useCatalog } from '../store/catalog'
 import type { Category } from '../data/products'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
@@ -41,6 +41,15 @@ const cats: {
     Icon: Car,
   },
   {
+    category: 'Canvas',
+    to: '/canvas',
+    title: 'Canvas',
+    blurb: 'Bold wall art, ready to hang',
+    accent: 'from-cream to-lavender',
+    chip: 'bg-cream text-ink',
+    Icon: Frame,
+  },
+  {
     category: 'Custom',
     to: '/custom',
     title: 'Custom studio',
@@ -68,7 +77,7 @@ export default function Shop() {
           Browse by type — full catalogs with search &amp; sort on every page.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {counts.map((c) => {
           const Icon = c.Icon
           return (

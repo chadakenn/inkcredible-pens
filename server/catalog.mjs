@@ -24,7 +24,7 @@ export const CATALOG_DIR = path.resolve(__dirname, "../data/catalog")
 export const CATALOG_FILE = path.join(CATALOG_DIR, "products.json")
 export const CATALOG_SEED_FILE = path.join(__dirname, "catalog-seed.json")
 
-const CATEGORIES = new Set(["Pens", "Stickers", "Car Freshies", "Custom"])
+const CATEGORIES = new Set(["Pens", "Stickers", "Car Freshies", "Canvas", "Custom"])
 const ART_TYPES = new Set([
   "pen",
   "sticker",

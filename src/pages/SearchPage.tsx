@@ -109,6 +109,7 @@ export default function SearchPage() {
                 ['Pens', '/pens'],
                 ['Stickers', '/stickers'],
                 ['Freshies', '/freshies'],
+                ['Canvas', '/canvas'],
                 ['Custom', '/custom'],
               ] as const
             ).map(([label, to]) => (

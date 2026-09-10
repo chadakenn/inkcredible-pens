@@ -16,6 +16,7 @@ const CATEGORY_PATH: Record<string, string> = {
   Pens: '/pens',
   Stickers: '/stickers',
   'Car Freshies': '/freshies',
+  Canvas: '/canvas',
   Custom: '/custom',
 }
 

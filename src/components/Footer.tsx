@@ -34,6 +34,7 @@ export default function Footer() {
           <Link to="/pens" className="block text-mute transition hover:text-cyan">Pens</Link>
           <Link to="/stickers" className="block text-mute transition hover:text-cyan">Stickers</Link>
           <Link to="/freshies" className="block text-mute transition hover:text-cyan">Freshies</Link>
+          <Link to="/canvas" className="block text-mute transition hover:text-cyan">Canvas</Link>
           <Link to="/custom" className="block text-mute transition hover:text-cyan">Custom studio</Link>
           <Link to="/shop" className="block text-mute transition hover:text-cyan">All categories</Link>
           <Link to="/search" className="block text-mute transition hover:text-cyan">Search</Link>

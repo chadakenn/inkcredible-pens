@@ -22,7 +22,7 @@ const DEFAULT_ALLOWED = [
   'chadakennedy86@gmail.com',
   'kelliekennedy81@gmail.com',
 ]
-const CATEGORIES = ['Pens', 'Stickers', 'Car Freshies', 'Custom']
+const CATEGORIES = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
 const ART_TYPES = ['pen', 'sticker', 'freshie', 'resin', 'badge', 'pack', 'skin']
 
 mkdirSync(DRAFT_DIR, { recursive: true })

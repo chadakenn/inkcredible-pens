@@ -40,6 +40,11 @@ const CATEGORY_META: Record<
     blurb: 'Hang it. Drive louder.',
     accent: 'text-lime',
   },
+  Canvas: {
+    title: 'Canvas',
+    blurb: 'Bold wall art printed with attitude and ready to hang.',
+    accent: 'text-cream',
+  },
   Custom: {
     title: 'Custom Orders',
     blurb: 'Studio tools above — plus ready-made custom catalog below.',
@@ -254,6 +259,7 @@ export default function CategoryPage({ category }: { category: Category }) {
                 ['Pens', '/pens'],
                 ['Stickers', '/stickers'],
                 ['Freshies', '/freshies'],
+                ['Canvas', '/canvas'],
                 ['Custom', '/custom'],
               ] as const
             ).map(([label, to]) => {
@@ -261,6 +267,7 @@ export default function CategoryPage({ category }: { category: Category }) {
                 (label === 'Pens' && category === 'Pens') ||
                 (label === 'Stickers' && category === 'Stickers') ||
                 (label === 'Freshies' && category === 'Car Freshies') ||
+                (label === 'Canvas' && category === 'Canvas') ||
                 (label === 'Custom' && category === 'Custom')
               return (
                 <Link

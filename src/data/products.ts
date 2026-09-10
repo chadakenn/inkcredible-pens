@@ -1,4 +1,4 @@
-export type Category = 'Pens' | 'Stickers' | 'Car Freshies' | 'Custom'
+export type Category = 'Pens' | 'Stickers' | 'Car Freshies' | 'Canvas' | 'Custom'
 
 /** Custom cart-line meta (logo stickers, banners, canvas, business cards, freshie scent). */
 export type CustomLineType = 'logo' | 'banner' | 'canvas' | 'business-cards' | 'thank-you-cards'
@@ -64,7 +64,7 @@ export interface Product {
   custom?: CustomLogoMeta
 }
 
-export const categories = ['All', 'Pens', 'Stickers', 'Car Freshies', 'Custom'] as const
+export const categories = ['All', 'Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom'] as const
 export type FilterCategory = (typeof categories)[number]
 
 export const products: Product[] = [

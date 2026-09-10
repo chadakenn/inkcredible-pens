@@ -37,7 +37,7 @@ import OrdersPanel from '../components/admin/OrdersPanel'
 import ProductPhotoField from '../components/admin/ProductPhotoField'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
-const CATEGORIES: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Custom']
+const CATEGORIES: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
 
 const ART_OPTIONS: { value: ArtPick; label: string }[] = [
   { value: 'pen', label: 'Pen' },
@@ -654,7 +654,7 @@ export default function Admin() {
                 <legend className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mute">
                   Category
                 </legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   {CATEGORIES.map((c) => {
                     const on = form.category === c
                     return (
@@ -666,6 +666,7 @@ export default function Admin() {
                             Pens: 'pen',
                             Stickers: 'sticker',
                             'Car Freshies': 'freshie',
+                            Canvas: 'pack',
                             Custom: 'sticker',
                           }
                           setForm((f) => ({
@@ -718,7 +719,7 @@ export default function Admin() {
                 <legend className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mute">
                   Picture style
                 </legend>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   {ART_OPTIONS.map((opt) => {
                     const on = form.art === opt.value
                     return (

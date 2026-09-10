@@ -9,6 +9,7 @@ const navLinks = [
   { label: 'Pens', to: '/pens' },
   { label: 'Stickers', to: '/stickers' },
   { label: 'Freshies', to: '/freshies' },
+  { label: 'Canvas', to: '/canvas' },
   { label: 'Custom', to: '/custom' },
 ] as const
 

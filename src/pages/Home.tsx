@@ -12,12 +12,13 @@ import type { Category, Product } from '../data/products'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 const FEATURED_PER_CAT = 2
-const FEATURED_ORDER: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Custom']
+const FEATURED_ORDER: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
 
 const shopQuick = [
   { label: 'Shop Pens', to: '/pens' },
   { label: 'Shop Stickers', to: '/stickers' },
   { label: 'Shop Freshies', to: '/freshies' },
+  { label: 'Shop Canvas', to: '/canvas' },
 ] as const
 
 export default function Home() {

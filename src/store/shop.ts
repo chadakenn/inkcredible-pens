@@ -21,6 +21,7 @@ export function pathForCategory(label: string): string {
   if (key === 'pens') return '/pens'
   if (key === 'stickers') return '/stickers'
   if (key === 'freshies' || key === 'car freshies') return '/freshies'
+  if (key === 'canvas' || key === 'canvases') return '/canvas'
   if (
     key === 'custom logo stickers' ||
     key === 'logo stickers' ||
@@ -30,7 +31,7 @@ export function pathForCategory(label: string): string {
     return '/custom/logo-stickers'
   }
   if (key === 'custom banners' || key === 'banners') return '/custom/banners'
-  if (key === 'custom canvas' || key === 'canvas') return '/custom/canvas'
+  if (key === 'custom canvas') return '/custom/canvas'
   if (
     key === 'custom business cards' ||
     key === 'business cards' ||

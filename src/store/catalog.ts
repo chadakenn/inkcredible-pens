@@ -41,6 +41,7 @@ const ACCENTS: Record<Category, string[]> = {
   Pens: ['#ff9f43', '#ff2d95', '#c084fc', '#c8f542', '#22d3ee', '#a855f7'],
   Stickers: ['#ff2d95', '#22d3ee', '#c084fc', '#c8f542'],
   'Car Freshies': ['#f5e6c8', '#ffd166', '#22d3ee'],
+  Canvas: ['#f5e6c8', '#c084fc', '#22d3ee', '#ff2d95'],
   Custom: ['#c8f542', '#ff2d95', '#22d3ee'],
 }
 
