@@ -54,6 +54,9 @@ data/admin/*
 data/checkouts/*
 !data/checkouts/.gitkeep
 
+# Paid-order email delivery state (keep folder via .gitkeep)
+data/email/*
+!data/email/.gitkeep
 
 # Rolling JSON backups
 *.json.bak
