@@ -1,0 +1,320 @@
+import { mkdirSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { readJsonFile, writeJsonAtomic } from './security.mjs'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const ORDERS_FILE = path.resolve(__dirname, '../data/orders/orders.json')
+const EMAIL_DIR = path.resolve(__dirname, '../data/email')
+const STATE_FILE = path.join(EMAIL_DIR, 'email-state.json')
+
+const API_KEY = String(process.env.RESEND_API_KEY || '').trim()
+const FROM_EMAIL = String(process.env.ORDER_FROM_EMAIL || '').trim()
+const OWNER_EMAIL = String(process.env.ORDER_NOTIFICATION_EMAIL || '').trim()
+const REPLY_TO = String(process.env.ORDER_REPLY_TO || OWNER_EMAIL || '').trim()
+const STORE_ORIGIN = String(process.env.ORIGIN || '').trim().replace(/\/$/, '')
+const SEND_EXISTING = String(process.env.EMAIL_SEND_EXISTING_ORDERS || '') === '1'
+const POLL_SECONDS = Math.min(300, Math.max(5, Math.round(Number(process.env.EMAIL_POLL_SECONDS) || 15)))
+const POLL_MS = POLL_SECONDS * 1000
+const BASE_RETRY_MS = 30_000
+const MAX_RETRY_MS = 60 * 60 * 1000
+
+mkdirSync(EMAIL_DIR, { recursive: true })
+
+function money(value) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value) || 0)
+}
+
+function esc(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function clean(value, max = 300) {
+  return String(value ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, max)
+}
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim())
+}
+
+function readOrders() {
+  const data = readJsonFile(ORDERS_FILE)
+  if (data == null) return []
+  if (Array.isArray(data)) return data
+  if (data && Array.isArray(data.orders)) return data.orders
+  throw new Error('unexpected_orders_shape')
+}
+
+function readState() {
+  const data = readJsonFile(STATE_FILE)
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+  if (!data.orders || typeof data.orders !== 'object' || Array.isArray(data.orders)) data.orders = {}
+  return data
+}
+
+function writeState(state) {
+  writeJsonAtomic(STATE_FILE, state, { keepBackups: 5 })
+}
+
+function addressText(customer) {
+  const c = customer && typeof customer === 'object' ? customer : {}
+  return [
+    clean(c.name),
+    clean(c.address),
+    [clean(c.city), clean(c.state), clean(c.zip)].filter(Boolean).join(' '),
+  ].filter(Boolean).join('\n')
+}
+
+const HIDDEN_CUSTOM_KEYS = new Set([
+  'artworkUrl', 'artworkId', 'artworkFileName', 'fileName', 'estimateOnly',
+])
+
+const FRIENDLY_LABELS = {
+  type: 'Type', style: 'Style', cut: 'Cut', stickerQty: 'Sticker quantity',
+  stickerSize: 'Sticker size', stickerSizeId: 'Sticker size', bannerSizeLabel: 'Banner size',
+  bannerWidthFt: 'Banner width', bannerHeightFt: 'Banner height', bannerSides: 'Banner sides',
+  bannerNotes: 'Banner notes', canvasSizeLabel: 'Canvas size', canvasFinish: 'Canvas finish',
+  canvasNotes: 'Canvas notes', cardPackQty: 'Card quantity', cardNotes: 'Card notes',
+  scent: 'Scent', scentName: 'Scent', selectedScent: 'Scent', color: 'Color',
+  colorName: 'Color', notes: 'Notes', logoComingByEmail: 'Logo coming by email',
+}
+
+function labelFor(key) {
+  return FRIENDLY_LABELS[key] || String(key)
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/^./, (c) => c.toUpperCase())
+}
+
+function customDetails(custom) {
+  if (!custom || typeof custom !== 'object' || Array.isArray(custom)) return []
+  const details = []
+  const labels = new Set()
+  for (const [key, raw] of Object.entries(custom)) {
+    if (HIDDEN_CUSTOM_KEYS.has(key) || raw == null || raw === '' || typeof raw === 'object') continue
+    const label = labelFor(key)
+    if (labels.has(label)) continue
+    labels.add(label)
+    const value = typeof raw === 'boolean' ? (raw ? 'Yes' : 'No') : clean(raw, 500)
+    if (value) details.push([label, value])
+    if (details.length >= 12) break
+  }
+  const artworkName = clean(custom.artworkFileName || custom.fileName || custom.artworkId, 180)
+  if (artworkName || custom.artworkUrl) details.push(['Artwork', artworkName || 'Uploaded artwork'])
+  return details
+}
+
+function itemRows(order) {
+  return (Array.isArray(order.items) ? order.items : []).map((item) => {
+    const qty = Math.max(1, Math.round(Number(item.qty) || 1))
+    const unit = Number(item.price) || 0
+    return {
+      name: clean(item.name || 'Item', 240), qty, unit, lineTotal: unit * qty,
+      details: customDetails(item.custom),
+    }
+  })
+}
+
+function totals(order) {
+  const total = Number(order.total) || 0
+  const shipping = Number.isFinite(Number(order.shippingCents)) ? Number(order.shippingCents) / 100 : 0
+  const subtotal = Number.isFinite(Number(order.subtotalCents)) ? Number(order.subtotalCents) / 100 : Math.max(0, total - shipping)
+  return { subtotal, shipping, total }
+}
+
+function orderCode(order) {
+  return clean(order.id || order.stripeSessionId || 'order', 260)
+}
+
+function itemsHtml(rows) {
+  if (!rows.length) return '<p style="color:#aaaab3;">No item details found.</p>'
+  return rows.map((row) => {
+    const details = row.details.length
+      ? `<ul style="margin:8px 0 0;padding-left:20px;color:#c9c9d1;">${row.details.map(([k, v]) => `<li><strong>${esc(k)}:</strong> ${esc(v)}</li>`).join('')}</ul>`
+      : ''
+    return `<div style="padding:14px 0;border-bottom:1px solid #2b2b31;"><strong>${esc(row.name)} × ${row.qty}</strong><span style="float:right;color:#c9ff37;">${money(row.lineTotal)}</span>${details}</div>`
+  }).join('')
+}
+
+function itemsText(rows) {
+  return rows.map((row) => {
+    const details = row.details.length ? `\n${row.details.map(([k, v]) => `    ${k}: ${v}`).join('\n')}` : ''
+    return `- ${row.name} x${row.qty} — ${money(row.lineTotal)}${details}`
+  }).join('\n') || 'No item details found.'
+}
+
+function ownerMessage(order) {
+  const customer = order.customer && typeof order.customer === 'object' ? order.customer : {}
+  const rows = itemRows(order)
+  const t = totals(order)
+  const code = orderCode(order)
+  const address = addressText(customer)
+  const adminUrl = STORE_ORIGIN ? `${STORE_ORIGIN}/admin` : ''
+  const customerName = clean(customer.name, 80)
+  return {
+    subject: `New paid order • ${money(t.total)}${customerName ? ` • ${customerName}` : ''}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,Helvetica,sans-serif;"><div style="max-width:680px;margin:0 auto;padding:32px 18px;"><div style="border-top:4px solid #c9ff37;background:#121216;border-radius:16px;padding:28px;"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700;">INKCREDIBLE PENS</div><h1 style="margin:8px 0 4px;font-size:30px;">New paid order 🔥</h1><p style="color:#aaaab3;">Stripe payment confirmed. Order is saved in Store Manager.</p><div style="background:#0d0d10;border:1px solid #2b2b31;border-radius:12px;padding:16px;margin:20px 0;"><strong>Order:</strong> ${esc(code)}<br><strong>Customer:</strong> ${esc(clean(customer.name) || 'Not provided')}<br><strong>Email:</strong> ${esc(clean(customer.email) || 'Not provided')}</div><h2>Items</h2>${itemsHtml(rows)}<div style="margin-top:20px;padding-top:16px;border-top:2px solid #2b2b31;">Subtotal: ${money(t.subtotal)}<br>Shipping: ${t.shipping === 0 ? 'FREE' : money(t.shipping)}<br><strong style="font-size:22px;color:#c9ff37;">Total: ${money(t.total)}</strong></div><h2>Ship to</h2><div style="white-space:pre-line;">${esc(address || 'No shipping address found')}</div>${adminUrl ? `<p style="margin-top:28px;"><a href="${esc(adminUrl)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:999px;">Open Store Manager</a></p>` : ''}</div></div></body></html>`,
+    text: `NEW INKCREDIBLE ORDER\n\nOrder: ${code}\nCustomer: ${clean(customer.name) || 'Not provided'}\nEmail: ${clean(customer.email) || 'Not provided'}\n\nITEMS\n${itemsText(rows)}\n\nSubtotal: ${money(t.subtotal)}\nShipping: ${t.shipping === 0 ? 'FREE' : money(t.shipping)}\nTOTAL: ${money(t.total)}\n\nSHIP TO\n${address || 'No shipping address found'}${adminUrl ? `\n\nStore Manager: ${adminUrl}` : ''}`,
+  }
+}
+
+function customerMessage(order) {
+  const customer = order.customer && typeof order.customer === 'object' ? order.customer : {}
+  const rows = itemRows(order)
+  const t = totals(order)
+  const code = orderCode(order)
+  const address = addressText(customer)
+  return {
+    subject: `Inkcredible Pens order received • ${code}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,Helvetica,sans-serif;"><div style="max-width:680px;margin:0 auto;padding:32px 18px;"><div style="border-top:4px solid #ff3ea5;background:#121216;border-radius:16px;padding:28px;"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700;">INKCREDIBLE PENS</div><h1 style="margin:8px 0 4px;font-size:30px;">Order vibes received ✨</h1><p style="color:#aaaab3;">Your payment is confirmed and we have your order.</p><div style="background:#0d0d10;border:1px solid #2b2b31;border-radius:12px;padding:16px;margin:20px 0;"><div style="font-size:12px;color:#26d9ff;font-weight:700;">ORDER CODE</div><div style="margin-top:6px;word-break:break-all;">${esc(code)}</div></div><h2>Your order</h2>${itemsHtml(rows)}<div style="margin-top:20px;padding-top:16px;border-top:2px solid #2b2b31;">Subtotal: ${money(t.subtotal)}<br>Shipping: ${t.shipping === 0 ? 'FREE' : money(t.shipping)}<br><strong style="font-size:22px;color:#c9ff37;">Total paid: ${money(t.total)}</strong></div><h2>Shipping address</h2><div style="white-space:pre-line;">${esc(address || 'Address confirmed during checkout')}</div><p style="margin-top:26px;color:#aaaab3;">Questions or a custom-order detail to add? Reply to this email and include your order code.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\nOrder vibes received! Your payment is confirmed and we have your order.\n\nOrder code: ${code}\n\nYOUR ORDER\n${itemsText(rows)}\n\nSubtotal: ${money(t.subtotal)}\nShipping: ${t.shipping === 0 ? 'FREE' : money(t.shipping)}\nTOTAL PAID: ${money(t.total)}\n\nSHIPPING ADDRESS\n${address || 'Address confirmed during checkout'}\n\nQuestions? Reply to this email and include your order code.`,
+  }
+}
+
+async function sendEmail({ to, subject, html, text, idempotencyKey }) {
+  const payload = { from: FROM_EMAIL, to: [to], subject: clean(subject, 240), html, text }
+  if (REPLY_TO) payload.reply_to = REPLY_TO
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey.slice(0, 256),
+      'User-Agent': 'inkcredible-pens/1.0',
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15_000),
+  })
+  const body = await response.text()
+  let parsed = null
+  try { parsed = body ? JSON.parse(body) : null } catch { /* plain-text error */ }
+  if (!response.ok) {
+    throw new Error(`resend_${response.status}:${clean(parsed?.message || parsed?.name || body || response.statusText, 300)}`)
+  }
+  return typeof parsed?.id === 'string' ? parsed.id : null
+}
+
+function deliveryRecord(state, orderId, kind) {
+  if (!state.orders[orderId]) state.orders[orderId] = {}
+  if (!state.orders[orderId][kind]) state.orders[orderId][kind] = {}
+  return state.orders[orderId][kind]
+}
+
+function due(record) {
+  if (record.sentAt || record.skippedAt) return false
+  if (!record.nextAttemptAt) return true
+  const at = new Date(record.nextAttemptAt).getTime()
+  return !Number.isFinite(at) || at <= Date.now()
+}
+
+function retryDelay(attempts) {
+  return Math.min(MAX_RETRY_MS, BASE_RETRY_MS * 2 ** Math.min(7, Math.max(0, attempts - 1)))
+}
+
+async function attempt(state, order, kind, to, buildMessage) {
+  const record = deliveryRecord(state, order.id, kind)
+  if (!due(record)) return
+  if (!validEmail(to)) {
+    record.skippedAt = new Date().toISOString()
+    record.reason = 'missing_or_invalid_email'
+    writeState(state)
+    console.warn(`[email] ${kind} skipped for ${order.id}: missing/invalid recipient`)
+    return
+  }
+
+  const attempts = Math.max(0, Number(record.attempts) || 0) + 1
+  record.attempts = attempts
+  record.lastAttemptAt = new Date().toISOString()
+  delete record.nextAttemptAt
+  writeState(state)
+
+  try {
+    const emailId = await sendEmail({
+      to,
+      ...buildMessage(order),
+      idempotencyKey: `paid-order/${kind}/${order.id}`,
+    })
+    record.sentAt = new Date().toISOString()
+    if (emailId) record.emailId = emailId
+    delete record.lastError
+    delete record.nextAttemptAt
+    writeState(state)
+    console.log(`[email] ${kind} sent for ${order.id}${emailId ? ` (${emailId})` : ''}`)
+  } catch (err) {
+    record.lastError = clean(err instanceof Error ? err.message : String(err), 500)
+    record.nextAttemptAt = new Date(Date.now() + retryDelay(attempts)).toISOString()
+    writeState(state)
+    console.error(`[email] ${kind} failed for ${order.id}: ${record.lastError}`)
+  }
+}
+
+function paidStripeOrder(order) {
+  return Boolean(order && typeof order === 'object' && order.paid === true && order.id && order.stripeSessionId)
+}
+
+let warnedMissingConfig = false
+let running = false
+
+async function runOnce() {
+  if (running) return
+  running = true
+  try {
+    if (!API_KEY || !FROM_EMAIL) {
+      if (!warnedMissingConfig) {
+        const missing = [!API_KEY ? 'RESEND_API_KEY' : null, !FROM_EMAIL ? 'ORDER_FROM_EMAIL' : null].filter(Boolean)
+        console.warn(`[email] disabled until configured: missing ${missing.join(', ')}`)
+        warnedMissingConfig = true
+      }
+      return
+    }
+
+    const orders = readOrders().filter(paidStripeOrder)
+    let state = readState()
+    if (!state) {
+      state = { version: 1, initializedAt: new Date().toISOString(), orders: {} }
+      if (!SEND_EXISTING) {
+        const now = new Date().toISOString()
+        for (const order of orders) {
+          state.orders[order.id] = {
+            owner: { skippedAt: now, reason: 'preexisting_order' },
+            customer: { skippedAt: now, reason: 'preexisting_order' },
+          }
+        }
+        writeState(state)
+        console.log(`[email] delivery state initialized; skipped ${orders.length} pre-existing paid order(s)`)
+        return
+      }
+      writeState(state)
+    }
+
+    for (const order of [...orders].reverse()) {
+      if (OWNER_EMAIL) await attempt(state, order, 'owner', OWNER_EMAIL, ownerMessage)
+      else {
+        const record = deliveryRecord(state, order.id, 'owner')
+        if (!record.sentAt && !record.skippedAt) {
+          record.skippedAt = new Date().toISOString()
+          record.reason = 'ORDER_NOTIFICATION_EMAIL_not_configured'
+          writeState(state)
+        }
+      }
+      await attempt(state, order, 'customer', String(order.customer?.email || '').trim(), customerMessage)
+    }
+  } catch (err) {
+    console.error('[email] worker cycle failed', err)
+  } finally {
+    running = false
+  }
+}
+
+console.log(`[email] worker started (poll=${POLL_SECONDS}s, from=${FROM_EMAIL || 'not configured'}, owner=${OWNER_EMAIL ? 'configured' : 'not configured'}, sendExisting=${SEND_EXISTING})`)
+await runOnce()
+setInterval(() => { void runOnce() }, POLL_MS)
