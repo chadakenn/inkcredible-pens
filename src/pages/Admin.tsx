@@ -16,7 +16,7 @@ import {
   X,
   KeyRound,
 } from 'lucide-react'
-import type { Category } from '../data/products'
+import type { Category, ProductOptionGroup } from '../data/products'
 import {
   DEMO_PIN,
   changeAdminPin,
@@ -46,7 +46,17 @@ const ART_OPTIONS: { value: ArtPick; label: string }[] = [
   { value: 'pack', label: 'Pack' },
 ]
 
-const DEFAULT_CANVAS_OPTIONS = [{
+const CANVAS_SIZES = ['12×16 in', '16×20 in', '20×32 in'] as const
+type CanvasSize = (typeof CANVAS_SIZES)[number]
+type CanvasPrices = Record<CanvasSize, number>
+
+const RECOMMENDED_CANVAS_PRICES: CanvasPrices = {
+  '12×16 in': 35,
+  '16×20 in': 50,
+  '20×32 in': 85,
+}
+
+const DEFAULT_CANVAS_OPTIONS: ProductOptionGroup[] = [{
   name: 'Size',
   required: true,
   values: [
@@ -55,6 +65,84 @@ const DEFAULT_CANVAS_OPTIONS = [{
     { label: '20×32 in', priceAdjustment: 50 },
   ],
 }]
+
+function readCanvasPrices(price: number, optionGroups?: ProductOptionGroup[]): CanvasPrices {
+  const sizeGroup = optionGroups?.find((group) => group.name.toLowerCase() === 'size')
+  return Object.fromEntries(
+    CANVAS_SIZES.map((size) => {
+      const option = sizeGroup?.values.find((value) => value.label === size)
+      return [size, option ? price + option.priceAdjustment : RECOMMENDED_CANVAS_PRICES[size]]
+    }),
+  ) as CanvasPrices
+}
+
+function writeCanvasPrices(prices: CanvasPrices): { price: number; optionGroups: ProductOptionGroup[] } {
+  const price = prices['12×16 in']
+  return {
+    price,
+    optionGroups: [{
+      name: 'Size',
+      required: true,
+      values: CANVAS_SIZES.map((size) => ({
+        label: size,
+        priceAdjustment: Number((prices[size] - price).toFixed(2)),
+      })),
+    }],
+  }
+}
+
+function CanvasPriceEditor({
+  price,
+  optionGroups,
+  onChange,
+}: {
+  price: number
+  optionGroups?: ProductOptionGroup[]
+  onChange: (fields: { price: number; optionGroups: ProductOptionGroup[] }) => void
+}) {
+  const prices = readCanvasPrices(price, optionGroups)
+
+  return (
+    <fieldset className="rounded-2xl border border-cyan/40 bg-ink p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <legend className="font-display text-xl text-cream">Canvas sizes &amp; prices</legend>
+          <p className="mt-1 text-sm text-mute">Enter the price customers pay for each size.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(writeCanvasPrices(RECOMMENDED_CANVAS_PRICES))}
+          className="min-h-11 rounded-xl border border-line bg-ink-2 px-3 text-sm font-extrabold text-cyan hover:border-cyan/50"
+        >
+          Use recommended prices
+        </button>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {CANVAS_SIZES.map((size) => (
+          <label key={size} className="block">
+            <span className="mb-2 block text-sm font-extrabold text-cream">{size}</span>
+            <span className="flex min-h-14 items-center rounded-2xl border border-line bg-ink-2 px-4 focus-within:border-cyan">
+              <span className="mr-2 text-lg font-extrabold text-lime">$</span>
+              <input
+                required
+                type="number"
+                min={0.01}
+                step={0.01}
+                aria-label={`${size} price in dollars`}
+                value={prices[size]}
+                onChange={(event) => onChange(writeCanvasPrices({
+                  ...prices,
+                  [size]: Number(event.target.value),
+                }))}
+                className="min-w-0 flex-1 bg-transparent text-lg font-bold text-cream outline-none"
+              />
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  )
+}
 
 type AdminTab = 'products' | 'scents' | 'orders'
 
@@ -65,6 +153,7 @@ interface ProductEditForm {
   category: Category
   imageUrl: string
   inventoryQuantity: number | null
+  optionGroups?: ProductOptionGroup[]
 }
 
 function isQuotaError(error: unknown): boolean {
@@ -375,6 +464,7 @@ export default function Admin() {
       category: product.category,
       imageUrl: product.imageUrl ?? '',
       inventoryQuantity: product.inventoryQuantity ?? null,
+      optionGroups: product.optionGroups,
     })
     setProductType(product.category)
     setEditSaveError(null)
@@ -385,8 +475,10 @@ export default function Admin() {
     e.preventDefault()
     if (!editForm) return
     const name = editForm.name.trim()
-    if (!name || !(editForm.price > 0)) {
-      setEditSaveError('Add a name and a price greater than zero.')
+    const canvasPrices = readCanvasPrices(editForm.price, editForm.optionGroups)
+    const canvasPricesValid = CANVAS_SIZES.every((size) => canvasPrices[size] > 0)
+    if (!name || !(editForm.price > 0) || (editForm.category === 'Canvas' && !canvasPricesValid)) {
+      setEditSaveError('Add a name and make sure every price is greater than zero.')
       return
     }
     setEditSaveError(null)
@@ -397,6 +489,7 @@ export default function Admin() {
         category: editForm.category,
         imageUrl: editForm.imageUrl.trim() || undefined,
         inventoryQuantity: editForm.inventoryQuantity,
+        optionGroups: editForm.optionGroups,
       })
       setJustEdited(name)
       setEditForm(null)
@@ -712,7 +805,7 @@ export default function Admin() {
                 <input type="number" min={0} step={1} value={form.inventoryQuantity ?? ''} onChange={(e) => setForm((f) => ({ ...f, inventoryQuantity: e.target.value === '' ? undefined : Math.max(0, Math.floor(Number(e.target.value))) }))} placeholder="Made to order" className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none placeholder:text-mute focus:border-cyan" />
               </label>
 
-              <label className="block">
+              {form.category !== 'Canvas' && <label className="block">
                 <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
                   Price (dollars)
                 </span>
@@ -727,7 +820,7 @@ export default function Admin() {
                   }
                   className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan"
                 />
-              </label>
+              </label>}
 
               <fieldset>
                 <legend className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mute">
@@ -769,6 +862,14 @@ export default function Admin() {
                   })}
                 </div>
               </fieldset>
+
+              {form.category === 'Canvas' && (
+                <CanvasPriceEditor
+                  price={form.price}
+                  optionGroups={form.optionGroups}
+                  onChange={(fields) => setForm((current) => ({ ...current, ...fields }))}
+                />
+              )}
 
               <label className="block">
                 <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
@@ -893,7 +994,7 @@ export default function Admin() {
                 />
               </label>
 
-              <label className="block">
+              {editForm.category !== 'Canvas' && <label className="block">
                 <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
                   Price (dollars)
                 </span>
@@ -910,7 +1011,7 @@ export default function Admin() {
                   }
                   className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan"
                 />
-              </label>
+              </label>}
 
               <fieldset>
                 <legend className="mb-2 text-sm font-extrabold uppercase tracking-wide text-mute">
@@ -923,9 +1024,17 @@ export default function Admin() {
                       <button
                         key={c}
                         type="button"
-                        onClick={() =>
-                          setEditForm((f) => (f ? { ...f, category: c } : f))
-                        }
+                        onClick={() => setEditForm((current) => {
+                          if (!current) return current
+                          if (c === 'Canvas') {
+                            return {
+                              ...current,
+                              category: c,
+                              ...writeCanvasPrices(RECOMMENDED_CANVAS_PRICES),
+                            }
+                          }
+                          return { ...current, category: c, optionGroups: undefined }
+                        })}
                         className={`min-h-14 rounded-2xl px-3 text-sm font-extrabold transition active:scale-[0.98] ${
                           on
                             ? 'bg-cream text-ink'
@@ -938,6 +1047,16 @@ export default function Admin() {
                   })}
                 </div>
               </fieldset>
+
+              {editForm.category === 'Canvas' && (
+                <CanvasPriceEditor
+                  price={editForm.price}
+                  optionGroups={editForm.optionGroups}
+                  onChange={(fields) => setEditForm((current) => (
+                    current ? { ...current, ...fields } : current
+                  ))}
+                />
+              )}
 
               <label className="block">
                 <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
