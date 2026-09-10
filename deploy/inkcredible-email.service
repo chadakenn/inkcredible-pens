@@ -1,0 +1,22 @@
+[Unit]
+Description=Inkcredible Pens paid-order email worker
+After=network-online.target inkcredible.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=inkcredible
+Group=inkcredible
+WorkingDirectory=/opt/inkcredible-pens
+EnvironmentFile=/opt/inkcredible-pens/.env
+ExecStart=/usr/bin/node server/email-worker.mjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/inkcredible-pens/data/email
+
+[Install]
+WantedBy=multi-user.target
