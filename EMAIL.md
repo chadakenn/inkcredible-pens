@@ -2,8 +2,9 @@
 
 Inkcredible Pens can send two emails after a paid Stripe order is persisted:
 
-1. A shop-owner notification with customer, shipping, item/customization, totals, and a Store Manager link.
+1. A shop notification to every configured recipient, with customer, shipping, item/customization, totals, and a Store Manager link.
 2. A customer confirmation with the order code, items, total paid, and shipping address.
+3. A customer shipping confirmation with carrier, tracking number, and a tracking link after tracking is saved in Store Manager.
 
 Email delivery runs in a separate Node worker (`server/email-worker.mjs`). The Stripe webhook and order write do not wait on Resend, so an email outage cannot prevent a paid order from being saved.
 
@@ -21,7 +22,7 @@ Recommended production values:
 ```dotenv
 RESEND_API_KEY=re_your_real_key_here
 ORDER_FROM_EMAIL=Inkcredible Pens <orders@inkcredible.kennedyshome.com>
-ORDER_NOTIFICATION_EMAIL=inkcredible.pens@gmail.com
+ORDER_NOTIFICATION_EMAILS=inkcredible.pens@gmail.com,chadakennedy86@gmail.com
 ORDER_REPLY_TO=inkcredible.pens@gmail.com
 EMAIL_POLL_SECONDS=15
 EMAIL_SEND_EXISTING_ORDERS=0
@@ -32,6 +33,12 @@ EMAIL_SEND_EXISTING_ORDERS=0
 No. You do **not** need to create an inbox or email account for `orders@inkcredible.kennedyshome.com`. It is the From address that Resend uses after the domain is verified.
 
 Customer replies are directed to `ORDER_REPLY_TO`, which is set to `inkcredible.pens@gmail.com`. That existing Gmail inbox receives the replies.
+
+Separate multiple shop-notification recipients in `ORDER_NOTIFICATION_EMAILS` with commas. Do not add spaces unless they are part of a display name.
+
+## Tracking emails
+
+In Store Manager, open an order, select the carrier, enter the tracking number, and click **Save tracking**. The email worker detects the saved tracking number and sends the customer one shipping email with a carrier-specific tracking link. Delivery state prevents duplicate shipping emails on later worker polls.
 
 `ORDER_FROM_EMAIL` must use the domain accepted by Resend. During initial testing, use the sender Resend permits. After `inkcredible.kennedyshome.com` is verified, use `Inkcredible Pens <orders@inkcredible.kennedyshome.com>`.
 
