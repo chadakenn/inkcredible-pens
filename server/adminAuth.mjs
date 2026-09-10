@@ -1,288 +1,197 @@
-/**
- * Server-side admin PIN + HMAC session tokens.
- * PIN: ADMIN_PIN env or data/admin/pin.json after Change PIN.
- * Production hardening: refuse missing / default 1234 PIN at boot.
- * Dev may default to 1234 with a loud warning.
- * Session secret: ADMIN_SESSION_SECRET env or durable file in data/admin/.
- */
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+/** Individual Store Manager accounts with scrypt password hashes and expiring HMAC sessions. */
+import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRateLimiter, isProductionHardening as _isProductionHardening } from './security.mjs'
+import { createRateLimiter, isProductionHardening as _isProductionHardening, readJsonFile, writeJsonAtomic } from './security.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ADMIN_DIR = path.resolve(__dirname, '../data/admin')
 const PIN_FILE = path.join(ADMIN_DIR, 'pin.json')
+const USERS_FILE = path.join(ADMIN_DIR, 'users.json')
 const SECRET_FILE = path.join(ADMIN_DIR, 'session-secret.json')
-
 const DEFAULT_PIN = '1234'
-const TOKEN_TTL_MS = 1000 * 60 * 60 * 12 // 12 hours
+const TOKEN_TTL_MS = 1000 * 60 * 60 * 12
+const DUMMY_SALT = '8f8d41fcbfb95a7ca94aa9abf71e9c2f'
+const DUMMY_HASH = scryptSync('not-the-password', DUMMY_SALT, 64)
 
 mkdirSync(ADMIN_DIR, { recursive: true })
 
-function safeEqualStr(a, b) {
-  const ba = Buffer.from(String(a), 'utf8')
-  const bb = Buffer.from(String(b), 'utf8')
-  if (ba.length !== bb.length) return false
-  return timingSafeEqual(ba, bb)
+function safeEqual(a, b) {
+  const ba = Buffer.isBuffer(a) ? a : Buffer.from(String(a), 'utf8')
+  const bb = Buffer.isBuffer(b) ? b : Buffer.from(String(b), 'utf8')
+  return ba.length === bb.length && timingSafeEqual(ba, bb)
 }
 
-/**
- * Resolve effective admin PIN.
- * Order: persisted pin.json → ADMIN_PIN env → (dev only) default 1234.
- * @param {{ allowDefault?: boolean }} [opts]
- */
-export function getAdminPin(opts = {}) {
-  const allowDefault = opts.allowDefault !== false
+function normalizedUsername(value) { return String(value || '').trim().toLowerCase() }
+
+function validateAccount(username, displayName, password) {
+  if (!/^[a-z0-9._-]{3,40}$/.test(username)) throw Object.assign(new Error('invalid_username'), { code: 'invalid_username' })
+  if (String(displayName || '').trim().length < 2) throw Object.assign(new Error('invalid_display_name'), { code: 'invalid_display_name' })
+  if (String(password || '').length < 10) throw Object.assign(new Error('password_too_short'), { code: 'password_too_short' })
+  if (String(password || '').length > 256) throw Object.assign(new Error('password_too_long'), { code: 'password_too_long' })
+}
+
+function readUsers() {
+  const data = readJsonFile(USERS_FILE)
+  if (data == null) return []
+  if (Array.isArray(data)) return data
+  if (data && Array.isArray(data.users)) return data.users
+  throw new Error('invalid_admin_users_file')
+}
+
+function writeUsers(users) { writeJsonAtomic(USERS_FILE, { version: 1, users }, { keepBackups: 5 }) }
+function publicUser(user) { return { id: user.id, username: user.username, displayName: user.displayName, role: user.role || 'admin' } }
+
+function passwordMatches(user, password) {
+  const salt = user?.passwordSalt || DUMMY_SALT
+  const expected = user?.passwordHash ? Buffer.from(user.passwordHash, 'hex') : DUMMY_HASH
+  let actual
+  try { actual = scryptSync(String(password || ''), salt, 64) } catch { actual = Buffer.alloc(64) }
+  return Boolean(user) && safeEqual(actual, expected)
+}
+
+function createUserRecord({ username, displayName, password }) {
+  const cleanUsername = normalizedUsername(username)
+  const cleanName = String(displayName || '').trim()
+  validateAccount(cleanUsername, cleanName, password)
+  const salt = randomBytes(16).toString('hex')
+  const now = new Date().toISOString()
+  return {
+    id: randomUUID(), username: cleanUsername, displayName: cleanName, role: 'admin',
+    passwordSalt: salt, passwordHash: scryptSync(String(password), salt, 64).toString('hex'),
+    sessionVersion: 1, createdAt: now, updatedAt: now,
+  }
+}
+
+function addAdminUser(input) {
+  const users = readUsers()
+  const next = createUserRecord(input)
+  if (users.some((user) => user.username === next.username)) throw Object.assign(new Error('username_exists'), { code: 'username_exists' })
+  users.push(next)
+  writeUsers(users)
+  return next
+}
+
+function getAdminPin() {
   try {
     if (existsSync(PIN_FILE)) {
       const data = JSON.parse(readFileSync(PIN_FILE, 'utf8'))
-      if (typeof data?.pin === 'string' && data.pin.trim().length >= 4) {
-        return data.pin.trim()
-      }
+      if (typeof data?.pin === 'string' && data.pin.trim().length >= 4) return data.pin.trim()
     }
-  } catch (err) {
-    console.error('[adminAuth] pin read failed', err)
-  }
-  const fromEnv = process.env.ADMIN_PIN
-  if (typeof fromEnv === 'string' && fromEnv.trim().length >= 4) {
-    return fromEnv.trim()
-  }
-  if (allowDefault) return DEFAULT_PIN
-  return null
+  } catch (error) { console.error('[adminAuth] pin read failed', error) }
+  const envPin = String(process.env.ADMIN_PIN || '').trim()
+  return envPin.length >= 4 ? envPin : DEFAULT_PIN
 }
 
-export function isDefaultAdminPin() {
-  const pin = getAdminPin({ allowDefault: true })
-  return pin === DEFAULT_PIN
-}
-
-/**
- * Production: refuse to boot if PIN missing or still the default 1234.
- * Dev: allow 1234 with a loud warning.
- * Call before app.listen.
- */
 export function assertAdminPinSafeToBoot() {
-  const persisted = (() => {
-    try {
-      if (existsSync(PIN_FILE)) {
-        const data = JSON.parse(readFileSync(PIN_FILE, 'utf8'))
-        if (typeof data?.pin === 'string' && data.pin.trim().length >= 4) {
-          return data.pin.trim()
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    return null
-  })()
-  const fromEnv =
-    typeof process.env.ADMIN_PIN === 'string' && process.env.ADMIN_PIN.trim().length >= 4
-      ? process.env.ADMIN_PIN.trim()
-      : null
-  const effective = persisted || fromEnv
-
-  if (_isProductionHardening()) {
-    if (!effective) {
-      console.error(
-        '[adminAuth] FATAL: ADMIN_PIN missing under production hardening. Set a strong ADMIN_PIN in .env (not 1234).',
-      )
-      process.exit(1)
-    }
-    if (effective === DEFAULT_PIN) {
-      console.error(
-        '[adminAuth] FATAL: ADMIN_PIN is the default 1234 under production hardening. Set a strong PIN (or Change PIN so data/admin/pin.json is not 1234).',
-      )
-      process.exit(1)
-    }
-    if (effective.length < 6) {
-      console.warn(
-        '[adminAuth] WARNING: ADMIN_PIN is shorter than 6 characters — prefer a longer PIN in production.',
-      )
-    }
-    return
+  if (readUsers().length > 0) return
+  const pin = getAdminPin()
+  if (_isProductionHardening() && (!pin || pin === DEFAULT_PIN)) {
+    console.error('[adminAuth] FATAL: create Store Manager accounts first, or set a strong ADMIN_PIN for one-time account setup.')
+    process.exit(1)
   }
-
-  if (!effective || effective === DEFAULT_PIN) {
-    console.warn(
-      '[adminAuth] WARNING: using default admin PIN 1234 — fine for local/dev only. Production will refuse to start with this PIN.',
-    )
-  }
-}
-
-export function setAdminPin(newPin) {
-  const pin = String(newPin ?? '').trim()
-  if (pin.length < 4) {
-    const err = new Error('pin_too_short')
-    err.code = 'pin_too_short'
-    throw err
-  }
-  writeFileSync(
-    PIN_FILE,
-    JSON.stringify({ pin, updatedAt: new Date().toISOString() }, null, 2),
-    'utf8',
-  )
-  return pin
+  console.warn('[adminAuth] Store Manager account setup is pending; the existing ADMIN_PIN is setup-only.')
 }
 
 function loadOrCreateSessionSecret() {
-  if (typeof process.env.ADMIN_SESSION_SECRET === 'string' && process.env.ADMIN_SESSION_SECRET.length >= 16) {
-    return process.env.ADMIN_SESSION_SECRET
-  }
+  if (typeof process.env.ADMIN_SESSION_SECRET === 'string' && process.env.ADMIN_SESSION_SECRET.length >= 16) return process.env.ADMIN_SESSION_SECRET
   try {
     if (existsSync(SECRET_FILE)) {
       const data = JSON.parse(readFileSync(SECRET_FILE, 'utf8'))
-      if (typeof data?.secret === 'string' && data.secret.length >= 16) {
-        return data.secret
-      }
+      if (typeof data?.secret === 'string' && data.secret.length >= 16) return data.secret
     }
-  } catch (err) {
-    console.error('[adminAuth] secret read failed', err)
-  }
+  } catch (error) { console.error('[adminAuth] secret read failed', error) }
   const secret = randomBytes(32).toString('hex')
-  writeFileSync(
-    SECRET_FILE,
-    JSON.stringify({ secret, createdAt: new Date().toISOString() }, null, 2),
-    'utf8',
-  )
+  writeFileSync(SECRET_FILE, JSON.stringify({ secret, createdAt: new Date().toISOString() }, null, 2), 'utf8')
   console.log('[adminAuth] generated session secret →', SECRET_FILE)
   return secret
 }
 
 const sessionSecret = loadOrCreateSessionSecret()
+const b64url = (value) => Buffer.from(value).toString('base64url')
 
-function b64url(buf) {
-  return Buffer.from(buf)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
-}
-
-function fromB64url(str) {
-  const pad = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4))
-  const b64 = String(str).replace(/-/g, '+').replace(/_/g, '/') + pad
-  return Buffer.from(b64, 'base64').toString('utf8')
-}
-
-export function signAdminToken(payload = {}) {
-  const body = {
-    ...payload,
-    iat: Date.now(),
-    exp: Date.now() + TOKEN_TTL_MS,
-  }
-  const payloadPart = b64url(JSON.stringify(body))
-  const sig = createHmac('sha256', sessionSecret).update(payloadPart).digest()
-  return `${payloadPart}.${b64url(sig)}`
+export function signAdminToken(user) {
+  const body = { sub: user.id, username: user.username, displayName: user.displayName, role: 'admin', sv: user.sessionVersion || 1, iat: Date.now(), exp: Date.now() + TOKEN_TTL_MS }
+  const payload = b64url(JSON.stringify(body))
+  const signature = createHmac('sha256', sessionSecret).update(payload).digest('base64url')
+  return `${payload}.${signature}`
 }
 
 export function verifyAdminToken(token) {
-  if (typeof token !== 'string' || !token.includes('.')) return null
-  const [payloadPart, sigPart] = token.split('.')
-  if (!payloadPart || !sigPart) return null
-  const expected = createHmac('sha256', sessionSecret).update(payloadPart).digest()
-  let provided
+  if (typeof token !== 'string') return null
+  const [payload, signature] = token.split('.')
+  if (!payload || !signature) return null
+  const expected = createHmac('sha256', sessionSecret).update(payload).digest('base64url')
+  if (!safeEqual(signature, expected)) return null
   try {
-    const pad = sigPart.length % 4 === 0 ? '' : '='.repeat(4 - (sigPart.length % 4))
-    const b64 = sigPart.replace(/-/g, '+').replace(/_/g, '/') + pad
-    provided = Buffer.from(b64, 'base64')
-  } catch {
-    return null
-  }
-  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
-    return null
-  }
-  try {
-    const body = JSON.parse(fromB64url(payloadPart))
-    if (!body || typeof body.exp !== 'number' || Date.now() > body.exp) return null
-    return body
-  } catch {
-    return null
-  }
+    const body = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+    if (!body?.sub || typeof body.exp !== 'number' || Date.now() > body.exp) return null
+    const user = readUsers().find((row) => row.id === body.sub)
+    if (!user || (user.sessionVersion || 1) !== body.sv) return null
+    return { ...body, user: publicUser(user) }
+  } catch { return null }
 }
 
-export function extractBearer(req) {
-  const h = req.headers?.authorization || req.headers?.Authorization
-  if (typeof h !== 'string') return null
-  const m = /^Bearer\s+(.+)$/i.exec(h.trim())
-  return m ? m[1].trim() : null
+function extractBearer(req) {
+  const match = /^Bearer\s+(.+)$/i.exec(String(req.headers?.authorization || '').trim())
+  return match ? match[1].trim() : null
 }
 
-/** Express middleware — requires valid admin session Bearer token. */
 export function requireAdmin(req, res, next) {
-  const token = extractBearer(req)
-  const payload = token ? verifyAdminToken(token) : null
-  if (!payload) {
-    return res.status(401).json({ error: 'unauthorized' })
-  }
+  const payload = verifyAdminToken(extractBearer(req))
+  if (!payload) return res.status(401).json({ error: 'unauthorized' })
   req.admin = payload
   return next()
 }
 
-/**
- * @param {import('express').Express} app
- */
+function authResponse(user) { return { token: signAdminToken(user), expiresInMs: TOKEN_TTL_MS, user: publicUser(user) } }
+function accountError(res, error) {
+  const code = error?.code || 'account_failed'
+  return res.status(code === 'username_exists' ? 409 : 400).json({ error: code })
+}
+
 export function mountAdminAuth(app) {
-  const loginLimiter = createRateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    name: 'admin-login',
-  })
-  const changePinLimiter = createRateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 5,
-    name: 'admin-change-pin',
+  const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, name: 'admin-login' })
+  const accountLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, name: 'admin-account' })
+
+  app.get('/api/admin/setup-status', (_req, res) => res.json({ needsSetup: readUsers().length === 0 }))
+
+  app.post('/api/admin/setup', accountLimiter, (req, res) => {
+    if (readUsers().length > 0) return res.status(409).json({ error: 'setup_complete' })
+    if (!safeEqual(String(req.body?.pin || '').trim(), getAdminPin())) return res.status(401).json({ error: 'invalid_pin' })
+    try {
+      const user = addAdminUser(req.body || {})
+      return res.status(201).json(authResponse(user))
+    } catch (error) { return accountError(res, error) }
   })
 
   app.post('/api/admin/login', loginLimiter, (req, res) => {
-    // Slight delay on every attempt to slow brute force (does not reveal PIN existence)
-    const delayMs = 200 + Math.floor(Math.random() * 200)
-    const pin = String(req.body?.pin ?? '').trim()
-    const ok = Boolean(pin) && safeEqualStr(pin, getAdminPin())
-    setTimeout(() => {
-      if (!ok) {
-        return res.status(401).json({ error: 'invalid_pin' })
-      }
-      const token = signAdminToken({ role: 'admin' })
-      return res.json({
-        token,
-        expiresInMs: TOKEN_TTL_MS,
-        isDefaultPin: isDefaultAdminPin(),
-      })
-    }, delayMs)
+    const username = normalizedUsername(req.body?.username)
+    const user = readUsers().find((row) => row.username === username)
+    const ok = passwordMatches(user, req.body?.password)
+    const delay = 200 + Math.floor(Math.random() * 200)
+    setTimeout(() => ok ? res.json(authResponse(user)) : res.status(401).json({ error: 'invalid_credentials' }), delay)
   })
 
-  // Requires authenticated admin Bearer session — current PIN alone is not enough.
-  app.post('/api/admin/change-pin', changePinLimiter, requireAdmin, (req, res) => {
-    const currentPin = String(req.body?.currentPin ?? '').trim()
-    const newPin = String(req.body?.newPin ?? '').trim()
+  app.get('/api/admin/session', requireAdmin, (req, res) => res.json({ ok: true, user: req.admin.user }))
+  app.get('/api/admin/users', requireAdmin, (_req, res) => res.json({ users: readUsers().map(publicUser) }))
 
-    if (!currentPin || !safeEqualStr(currentPin, getAdminPin())) {
-      return res.status(401).json({ error: 'invalid_pin' })
-    }
-    if (newPin === DEFAULT_PIN) {
-      return res.status(400).json({ error: 'pin_is_default' })
-    }
-    try {
-      setAdminPin(newPin)
-    } catch (err) {
-      if (err?.code === 'pin_too_short') {
-        return res.status(400).json({ error: 'pin_too_short' })
-      }
-      console.error('[adminAuth] change-pin', err)
-      return res.status(500).json({ error: 'change_failed' })
-    }
-    const nextToken = signAdminToken({ role: 'admin' })
-    return res.json({
-      ok: true,
-      token: nextToken,
-      expiresInMs: TOKEN_TTL_MS,
-      isDefaultPin: isDefaultAdminPin(),
-    })
+  app.post('/api/admin/users', requireAdmin, accountLimiter, (req, res) => {
+    try { return res.status(201).json({ user: publicUser(addAdminUser(req.body || {})) }) }
+    catch (error) { return accountError(res, error) }
   })
 
-  app.get('/api/admin/session', requireAdmin, (_req, res) => {
-    return res.json({ ok: true, isDefaultPin: isDefaultAdminPin() })
+  app.post('/api/admin/change-password', requireAdmin, accountLimiter, (req, res) => {
+    const users = readUsers()
+    const index = users.findIndex((user) => user.id === req.admin.sub)
+    if (index < 0 || !passwordMatches(users[index], req.body?.currentPassword)) return res.status(401).json({ error: 'invalid_password' })
+    const nextPassword = String(req.body?.newPassword || '')
+    try { validateAccount(users[index].username, users[index].displayName, nextPassword) }
+    catch (error) { return accountError(res, error) }
+    const salt = randomBytes(16).toString('hex')
+    users[index] = { ...users[index], passwordSalt: salt, passwordHash: scryptSync(nextPassword, salt, 64).toString('hex'), sessionVersion: (users[index].sessionVersion || 1) + 1, updatedAt: new Date().toISOString() }
+    writeUsers(users)
+    return res.json({ ok: true, ...authResponse(users[index]) })
   })
 }

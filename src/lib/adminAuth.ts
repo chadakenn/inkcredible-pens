@@ -1,17 +1,21 @@
-/** Server-backed admin session (Bearer token in sessionStorage). */
+/** Server-backed Store Manager accounts (Bearer token in sessionStorage). */
 
-export const DEMO_PIN = '1234'
 export const UNLOCK_KEY = 'inkcredible-admin-unlocked'
 export const TOKEN_KEY = 'inkcredible-admin-token'
-/** @deprecated local PIN storage — no longer authoritative */
-export const PIN_KEY = 'inkcredible-admin-pin'
+
+export interface AdminUser {
+  id: string
+  username: string
+  displayName: string
+  role: 'admin'
+}
 
 export class AdminAuthError extends Error {
   status: number
   code: string
 
-  constructor(message: string, status: number, code: string) {
-    super(message)
+  constructor(status: number, code: string) {
+    super(code)
     this.name = 'AdminAuthError'
     this.status = status
     this.code = code
@@ -19,37 +23,25 @@ export class AdminAuthError extends Error {
 }
 
 export function readAdminToken(): string | null {
-  try {
-    const t = sessionStorage.getItem(TOKEN_KEY)
-    return typeof t === 'string' && t.length > 10 ? t : null
-  } catch {
-    return null
-  }
+  try { return sessionStorage.getItem(TOKEN_KEY) } catch { return null }
 }
 
 export function writeAdminToken(token: string | null) {
   try {
     if (token) sessionStorage.setItem(TOKEN_KEY, token)
     else sessionStorage.removeItem(TOKEN_KEY)
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
 
 export function adminAuthHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = { ...(extra || {}) }
+  const headers = { ...(extra || {}) }
   const token = readAdminToken()
   if (token) headers.Authorization = `Bearer ${token}`
   return headers
 }
 
 export function readAdminUnlocked(): boolean {
-  try {
-    if (!readAdminToken()) return false
-    return sessionStorage.getItem(UNLOCK_KEY) === '1'
-  } catch {
-    return false
-  }
+  try { return Boolean(readAdminToken()) && sessionStorage.getItem(UNLOCK_KEY) === '1' } catch { return false }
 }
 
 export function writeAdminUnlocked(on: boolean) {
@@ -59,95 +51,67 @@ export function writeAdminUnlocked(on: boolean) {
       sessionStorage.removeItem(UNLOCK_KEY)
       sessionStorage.removeItem(TOKEN_KEY)
     }
-  } catch {
-    /* ignore */
-  }
+  } catch { /* ignore */ }
 }
 
-export async function loginAdmin(pin: string): Promise<{
-  token: string
-  isDefaultPin: boolean
-}> {
-  const res = await fetch('/api/admin/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin: String(pin ?? '').trim() }),
-  })
-  const data = (await res.json().catch(() => ({}))) as {
-    token?: string
-    isDefaultPin?: boolean
-    error?: string
-  }
-  if (!res.ok || !data.token) {
-    throw new AdminAuthError(
-      data.error || `login_failed_${res.status}`,
-      res.status,
-      data.error || 'login_failed',
-    )
-  }
+async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init)
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string }
+  if (!response.ok) throw new AdminAuthError(response.status, data.error || `request_failed_${response.status}`)
+  return data
+}
+
+function saveSession(data: { token: string; user: AdminUser }) {
   writeAdminToken(data.token)
   writeAdminUnlocked(true)
-  return { token: data.token, isDefaultPin: Boolean(data.isDefaultPin) }
+  return data.user
 }
 
-export async function changeAdminPin(
-  currentPin: string,
-  newPin: string,
-): Promise<{ isDefaultPin: boolean }> {
-  const res = await fetch('/api/admin/change-pin', {
-    method: 'POST',
-    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      currentPin: String(currentPin ?? '').trim(),
-      newPin: String(newPin ?? '').trim(),
-    }),
-  })
-  const data = (await res.json().catch(() => ({}))) as {
-    token?: string
-    isDefaultPin?: boolean
-    error?: string
-  }
-  if (!res.ok) {
-    throw new AdminAuthError(
-      data.error || `change_failed_${res.status}`,
-      res.status,
-      data.error || 'change_failed',
-    )
-  }
-  if (data.token) writeAdminToken(data.token)
-  return { isDefaultPin: Boolean(data.isDefaultPin) }
+export async function fetchAdminSetupStatus(): Promise<boolean> {
+  const data = await jsonRequest<{ needsSetup: boolean }>('/api/admin/setup-status')
+  return Boolean(data.needsSetup)
 }
 
-export async function fetchAdminSession(): Promise<{ ok: boolean; isDefaultPin: boolean }> {
-  const token = readAdminToken()
-  if (!token) return { ok: false, isDefaultPin: true }
-  const res = await fetch('/api/admin/session', {
-    headers: adminAuthHeaders(),
+export async function setupAdminAccount(input: { pin: string; username: string; displayName: string; password: string }): Promise<AdminUser> {
+  const data = await jsonRequest<{ token: string; user: AdminUser }>('/api/admin/setup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })
-  if (!res.ok) {
+  return saveSession(data)
+}
+
+export async function loginAdmin(username: string, password: string): Promise<AdminUser> {
+  const data = await jsonRequest<{ token: string; user: AdminUser }>('/api/admin/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
+  })
+  return saveSession(data)
+}
+
+export async function fetchAdminSession(): Promise<{ ok: boolean; user: AdminUser | null }> {
+  if (!readAdminToken()) return { ok: false, user: null }
+  try {
+    const data = await jsonRequest<{ user: AdminUser }>('/api/admin/session', { headers: adminAuthHeaders() })
+    return { ok: true, user: data.user }
+  } catch {
     writeAdminUnlocked(false)
-    return { ok: false, isDefaultPin: true }
+    return { ok: false, user: null }
   }
-  const data = (await res.json().catch(() => ({}))) as { isDefaultPin?: boolean }
-  return { ok: true, isDefaultPin: Boolean(data.isDefaultPin) }
 }
 
-/** @deprecated Use loginAdmin — kept so old imports don't break during transition. */
-export function verifyAdminPin(_input: string): boolean {
-  return false
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const data = await jsonRequest<{ users: AdminUser[] }>('/api/admin/users', { headers: adminAuthHeaders() })
+  return data.users
 }
 
-/** @deprecated */
-export function readAdminPin(): string {
-  return DEMO_PIN
+export async function addAdminUser(input: { username: string; displayName: string; password: string }): Promise<AdminUser> {
+  const data = await jsonRequest<{ user: AdminUser }>('/api/admin/users', {
+    method: 'POST', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input),
+  })
+  return data.user
 }
 
-/** @deprecated */
-export function writeAdminPin(_pin: string) {
-  throw new Error('use_changeAdminPin')
-}
-
-/** @deprecated Prefer session isDefaultPin from server. */
-export function isDefaultAdminPin(): boolean {
-  return true
+export async function changeAdminPassword(currentPassword: string, newPassword: string): Promise<AdminUser> {
+  const data = await jsonRequest<{ token: string; user: AdminUser }>('/api/admin/change-password', {
+    method: 'POST', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ currentPassword, newPassword }),
+  })
+  return saveSession(data)
 }

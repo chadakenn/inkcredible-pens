@@ -18,12 +18,16 @@ import {
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
-  DEMO_PIN,
-  changeAdminPin,
+  addAdminUser,
+  changeAdminPassword,
   fetchAdminSession,
+  fetchAdminSetupStatus,
+  fetchAdminUsers,
   loginAdmin,
   readAdminUnlocked,
+  setupAdminAccount,
   writeAdminUnlocked,
+  type AdminUser,
 } from '../lib/adminAuth'
 import { useCart } from '../store/cart'
 import {
@@ -217,8 +221,14 @@ export default function Admin() {
   const resetScents = useScents((s) => s.resetToDefaults)
 
   const [unlocked, setUnlocked] = useState(false)
-  const [pin, setPin] = useState('')
-  const [pinError, setPinError] = useState(false)
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+  const [setupPin, setSetupPin] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<NewProductInput>(emptyForm)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
@@ -237,12 +247,15 @@ export default function Admin() {
   const [editScentValue, setEditScentValue] = useState('')
   const [justScent, setJustScent] = useState<string | null>(null)
   const [productQuery, setProductQuery] = useState('')
-  const [showChangePin, setShowChangePin] = useState(false)
-  const [currentPinInput, setCurrentPinInput] = useState('')
-  const [newPinInput, setNewPinInput] = useState('')
-  const [confirmPinInput, setConfirmPinInput] = useState('')
-  const [pinChangeError, setPinChangeError] = useState<string | null>(null)
-  const [usingDefaultPin, setUsingDefaultPin] = useState(true)
+  const [showAccounts, setShowAccounts] = useState(false)
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [newAccountUsername, setNewAccountUsername] = useState('')
+  const [newAccountName, setNewAccountName] = useState('')
+  const [newAccountPassword, setNewAccountPassword] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [nextPassword, setNextPassword] = useState('')
+  const [nextPasswordConfirm, setNextPasswordConfirm] = useState('')
+  const [accountError, setAccountError] = useState<string | null>(null)
   const showToast = useCart((s) => s.showToast)
 
   const searchMatchedProducts = useMemo(() => {
@@ -291,21 +304,19 @@ export default function Admin() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      const setup = await fetchAdminSetupStatus().catch(() => false)
+      if (!cancelled) setNeedsSetup(setup)
       if (!readAdminUnlocked()) {
-        if (!cancelled) {
-          setUnlocked(false)
-          setUsingDefaultPin(true)
-        }
+        if (!cancelled) setUnlocked(false)
         return
       }
       const session = await fetchAdminSession()
       if (cancelled) return
       if (session.ok) {
         setUnlocked(true)
-        setUsingDefaultPin(session.isDefaultPin)
+        setAdminUser(session.user)
       } else {
         setUnlocked(false)
-        setUsingDefaultPin(true)
       }
     })()
     return () => {
@@ -333,64 +344,78 @@ export default function Admin() {
     setSearchParams(nextParams, { replace: true })
   }
 
-  const unlock = () => {
+  const unlock = (event?: FormEvent) => {
+    event?.preventDefault()
     void (async () => {
       try {
-        const result = await loginAdmin(pin)
+        const user = await loginAdmin(username.trim(), password)
         setUnlocked(true)
-        setUsingDefaultPin(result.isDefaultPin)
-        setPinError(false)
-        setPin('')
+        setAdminUser(user)
+        setAuthError(null)
+        setPassword('')
       } catch {
-        setPinError(true)
+        setAuthError('Username or password is incorrect.')
       }
     })()
   }
 
-  const resetPinForm = () => {
-    setCurrentPinInput('')
-    setNewPinInput('')
-    setConfirmPinInput('')
-    setPinChangeError(null)
-  }
-
-  const onChangePin = (e: FormEvent) => {
+  const finishSetup = (e: FormEvent) => {
     e.preventDefault()
-    setPinChangeError(null)
-    const current = currentPinInput.trim()
-    const next = newPinInput.trim()
-    const confirm = confirmPinInput.trim()
-    if (next.length < 4) {
-      setPinChangeError('New code must be at least 4 characters.')
-      return
-    }
-    if (next !== confirm) {
-      setPinChangeError('New code and confirmation do not match.')
+    if (password.length < 10 || password !== confirmPassword) {
+      setAuthError(password !== confirmPassword ? 'Passwords do not match.' : 'Use at least 10 characters for the password.')
       return
     }
     void (async () => {
       try {
-        const result = await changeAdminPin(current, next)
-        setUsingDefaultPin(result.isDefaultPin)
-        resetPinForm()
-        setShowChangePin(false)
-        showToast('Access code updated')
-      } catch (err) {
-        const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: string }).code) : ''
-        if (code === 'invalid_pin' || code === 'unauthorized') {
-          setPinChangeError('Current code is incorrect.')
-        } else if (code === 'pin_too_short') {
-          setPinChangeError('New code must be at least 4 characters.')
-        } else {
-          setPinChangeError('Could not save the new code. Try again.')
-        }
+        const user = await setupAdminAccount({ pin: setupPin, username, displayName, password })
+        setAdminUser(user)
+        setUnlocked(true)
+        setNeedsSetup(false)
+        setAuthError(null)
+      } catch {
+        setAuthError('Setup failed. Check the old access code, username, and password.')
       }
     })()
+  }
+
+  const refreshAdminUsers = () => void fetchAdminUsers().then(setAdminUsers).catch(() => setAccountError('Could not load accounts.'))
+
+  const createAccount = (e: FormEvent) => {
+    e.preventDefault()
+    setAccountError(null)
+    void addAdminUser({ username: newAccountUsername, displayName: newAccountName, password: newAccountPassword })
+      .then(() => {
+        setNewAccountUsername('')
+        setNewAccountName('')
+        setNewAccountPassword('')
+        refreshAdminUsers()
+        showToast('Account added')
+      })
+      .catch(() => setAccountError('Could not add account. Use a unique username and a password of at least 10 characters.'))
+  }
+
+  const updatePassword = (e: FormEvent) => {
+    e.preventDefault()
+    if (nextPassword !== nextPasswordConfirm) {
+      setAccountError('New passwords do not match.')
+      return
+    }
+    void changeAdminPassword(currentPassword, nextPassword)
+      .then((user) => {
+        setAdminUser(user)
+        setCurrentPassword('')
+        setNextPassword('')
+        setNextPasswordConfirm('')
+        setAccountError(null)
+        showToast('Password changed')
+      })
+      .catch(() => setAccountError('Could not change password. Check the current password and use at least 10 characters.'))
   }
 
   const lock = () => {
     writeAdminUnlocked(false)
     setUnlocked(false)
+    setAdminUser(null)
     setShowForm(false)
     setConfirmDeleteId(null)
     setConfirmReset(false)
@@ -402,8 +427,8 @@ export default function Admin() {
     setConfirmClearScents(false)
     setEditingScent(null)
     setScentError(null)
-    setShowChangePin(false)
-    resetPinForm()
+    setShowAccounts(false)
+    setAccountError(null)
   }
 
   const onAddScent = () => {
@@ -506,6 +531,7 @@ export default function Admin() {
   }
 
   if (!unlocked) {
+    const settingUp = needsSetup === true
     return (
       <div className="mx-auto flex min-h-[70dvh] max-w-lg flex-col justify-center px-4 py-10 sm:px-6">
         <Link
@@ -522,43 +548,47 @@ export default function Admin() {
           </div>
           <h1 className="font-display text-3xl text-cream sm:text-4xl">Store Manager</h1>
           <p className="mt-2 text-base text-mute">
-            Manage products, scents, and orders. Enter the code to get in.
+            {settingUp ? 'Create the first private owner account.' : 'Sign in to manage products, orders, and customers.'}
           </p>
-          <p className="mt-3 rounded-2xl border border-line bg-ink px-4 py-3 text-sm text-cream">
-            Ask Chad for the code. Default demo code is{' '}
-            <span className="font-extrabold text-lime">{DEMO_PIN}</span> until you change it.
-          </p>
-          <label className="mt-6 block">
+          <form onSubmit={settingUp ? finishSetup : unlock} className="mt-6 space-y-4">
+          {settingUp && <label className="block">
             <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
-              Code
+              Current access code
             </span>
             <input
               type="password"
-              inputMode="numeric"
               autoComplete="off"
-              value={pin}
-              onChange={(e) => {
-                setPin(e.target.value)
-                setPinError(false)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') unlock()
-              }}
-              placeholder="Type the code here"
-              className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-xl font-bold text-cream outline-none placeholder:text-mute focus:border-cyan"
+              value={setupPin}
+              onChange={(e) => { setSetupPin(e.target.value); setAuthError(null) }}
+              className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan"
             />
+          </label>}
+          {settingUp && <label className="block">
+            <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">Your name</span>
+            <input required value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Chad" className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none placeholder:text-mute focus:border-cyan" />
+          </label>}
+          <label className="block">
+            <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">Username</span>
+            <input required autoCapitalize="none" autoComplete="username" value={username} onChange={(e) => { setUsername(e.target.value); setAuthError(null) }} placeholder="chad" className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none placeholder:text-mute focus:border-cyan" />
           </label>
-          {pinError && (
-            <p className="mt-2 text-sm font-bold text-pink">Nope — try again.</p>
-          )}
+          <label className="block">
+            <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">Password</span>
+            <input required type="password" autoComplete={settingUp ? 'new-password' : 'current-password'} value={password} onChange={(e) => { setPassword(e.target.value); setAuthError(null) }} className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan" />
+          </label>
+          {settingUp && <label className="block">
+            <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">Confirm password</span>
+            <input required type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan" />
+          </label>}
+          {authError && <p role="alert" className="text-sm font-bold text-pink">{authError}</p>}
           <button
-            type="button"
-            onClick={unlock}
-            className="mt-5 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-lime px-6 text-lg font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99]"
+            type="submit"
+            disabled={needsSetup == null}
+            className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-lime px-6 text-lg font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99] disabled:opacity-50"
           >
             <Unlock className="h-5 w-5" />
-            Unlock
+            {needsSetup == null ? 'Checking…' : settingUp ? 'Create owner account' : 'Sign in'}
           </button>
+          </form>
         </div>
       </div>
     )
@@ -589,92 +619,53 @@ export default function Admin() {
         Products, freshie scents, and orders — all in one place. Catalog, scents, and orders sync from the server.
       </p>
 
-      {usingDefaultPin && (
-        <p className="mt-4 rounded-2xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-extrabold text-amber-200">
-          Still using the demo code — change it before going live.
-        </p>
-      )}
-
       <div className="mt-4">
         <button
           type="button"
           onClick={() => {
-            setShowChangePin((v) => !v)
-            setPinChangeError(null)
+            setShowAccounts((open) => {
+              if (!open) refreshAdminUsers()
+              return !open
+            })
+            setAccountError(null)
           }}
           className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-ink-2 px-4 text-sm font-bold text-mute hover:text-cream"
         >
           <KeyRound className="h-4 w-4 text-cyan" />
-          {showChangePin ? 'Hide access code' : 'Change access code'}
+          {showAccounts ? 'Hide accounts' : 'Accounts & password'}
         </button>
 
-        {showChangePin && (
-          <form
-            onSubmit={onChangePin}
-            className="mt-4 space-y-4 rounded-3xl border border-line bg-ink-2 p-5 sm:p-6"
-          >
-            <h2 className="font-display text-2xl text-cream">Change access code</h2>
-            <p className="text-sm text-mute">
-              Enter your current code, then choose a new one (at least 4 characters).
-            </p>
-            <label className="block">
-              <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
-                Current code
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={currentPinInput}
-                onChange={(e) => {
-                  setCurrentPinInput(e.target.value)
-                  setPinChangeError(null)
-                }}
-                className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
-                New code
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={newPinInput}
-                onChange={(e) => {
-                  setNewPinInput(e.target.value)
-                  setPinChangeError(null)
-                }}
-                className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-2 block text-sm font-extrabold uppercase tracking-wide text-mute">
-                Confirm new code
-              </span>
-              <input
-                type="password"
-                autoComplete="off"
-                value={confirmPinInput}
-                onChange={(e) => {
-                  setConfirmPinInput(e.target.value)
-                  setPinChangeError(null)
-                }}
-                className="min-h-14 w-full rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none focus:border-cyan"
-              />
-            </label>
-            {pinChangeError && (
-              <p role="alert" className="text-sm font-bold text-pink">
-                {pinChangeError}
-              </p>
-            )}
-            <button
-              type="submit"
-              className="flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl bg-lime px-6 text-lg font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99]"
-            >
-              <Save className="h-5 w-5" />
-              Save new code
-            </button>
-          </form>
+        {showAccounts && (
+          <div className="mt-4 space-y-5 rounded-3xl border border-line bg-ink-2 p-5 sm:p-6">
+            <div>
+              <h2 className="font-display text-2xl text-cream">Store Manager accounts</h2>
+              <p className="mt-1 text-sm text-mute">Signed in as {adminUser?.displayName || adminUser?.username}.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {adminUsers.map((user) => <span key={user.id} className="rounded-full border border-line bg-ink px-3 py-1.5 text-sm font-bold text-cream">{user.displayName} <span className="text-mute">@{user.username}</span></span>)}
+              </div>
+            </div>
+
+            <form onSubmit={createAccount} className="space-y-3 rounded-2xl border border-line bg-ink p-4">
+              <h3 className="font-display text-xl text-cream">Add Kellie or another manager</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input required value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} placeholder="Name" aria-label="New manager name" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
+                <input required autoCapitalize="none" value={newAccountUsername} onChange={(e) => setNewAccountUsername(e.target.value)} placeholder="Username" aria-label="New manager username" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              </div>
+              <input required type="password" minLength={10} autoComplete="new-password" value={newAccountPassword} onChange={(e) => setNewAccountPassword(e.target.value)} placeholder="Temporary password (10+ characters)" aria-label="New manager password" className="min-h-12 w-full rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              <button type="submit" className="min-h-12 w-full rounded-xl bg-cyan px-4 text-base font-extrabold text-ink">Add account</button>
+            </form>
+
+            <form onSubmit={updatePassword} className="space-y-3 rounded-2xl border border-line bg-ink p-4">
+              <h3 className="font-display text-xl text-cream">Change my password</h3>
+              <input required type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Current password" className="min-h-12 w-full rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input required type="password" minLength={10} autoComplete="new-password" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} placeholder="New password" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
+                <input required type="password" minLength={10} autoComplete="new-password" value={nextPasswordConfirm} onChange={(e) => setNextPasswordConfirm(e.target.value)} placeholder="Confirm new password" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              </div>
+              <button type="submit" className="min-h-12 w-full rounded-xl bg-lime px-4 text-base font-extrabold text-ink">Change password</button>
+            </form>
+            {accountError && <p role="alert" className="text-sm font-bold text-pink">{accountError}</p>}
+          </div>
         )}
       </div>
 

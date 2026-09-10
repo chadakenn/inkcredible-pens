@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Lock, Mail } from 'lucide-react'
+import { Mail } from 'lucide-react'
 import LogoMark from './LogoMark'
 import GraphicsLogo from './GraphicsLogo'
 
@@ -64,14 +64,6 @@ export default function Footer() {
             inkcredible.pens@gmail.com
           </a>
           <p className="text-mute">Created with Humor. Backed by Heart. Fueled by Real Life.</p>
-          <Link
-            to="/admin"
-            className="inline-flex items-center gap-1.5 text-mute/80 transition hover:text-cyan"
-            title="Manage store"
-          >
-            <Lock className="h-3.5 w-3.5" />
-            Manage store
-          </Link>
         </div>
       </div>
       <div className="flex h-1 w-full">
