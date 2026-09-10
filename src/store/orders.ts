@@ -6,11 +6,21 @@ import {
   deleteOrder as apiDeleteOrder,
   fetchOrders,
   patchOrder as apiPatchOrder,
+  refreshOrderTracking as apiRefreshOrderTracking,
   updateOrderStatus as apiUpdateOrderStatus,
   type OrdersSyncState,
 } from '../lib/ordersApi'
 
 export type OrderStatus = 'new' | 'in_progress' | 'done' | 'cancelled'
+
+export type TrackingStatus =
+  | 'unknown'
+  | 'pre_transit'
+  | 'in_transit'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'exception'
+  | 'expired'
 
 export interface OrderCustomer {
   email: string
@@ -41,6 +51,10 @@ export interface Order {
   trackingCarrier?: string
   trackingNumber?: string
   shippedAt?: string
+  trackingStatus?: TrackingStatus
+  trackingDetail?: string
+  trackingCheckedAt?: string
+  deliveredAt?: string
 }
 
 export interface OrderTrackingInput {
@@ -74,6 +88,8 @@ interface OrdersState {
   placeOrderFromStripe: (input: PlaceOrderFromStripeInput) => Promise<Order>
   setStatus: (id: string, status: OrderStatus) => Promise<void>
   setTracking: (id: string, tracking: OrderTrackingInput) => Promise<void>
+  refreshTracking: (id: string) => Promise<Order>
+  patchLocalOrder: (order: Order) => void
   removeOrder: (id: string) => Promise<void>
   hydrateFromApi: () => Promise<void>
 }
@@ -279,6 +295,22 @@ export const useOrders = create<OrdersState>()(
         }
       },
 
+      patchLocalOrder: (order) => {
+        set((s) => ({
+          orders: s.orders.map((o) => (o.id === order.id ? order : o)),
+        }))
+      },
+
+      refreshTracking: async (id) => {
+        const updated = await apiRefreshOrderTracking(id)
+        set((s) => ({
+          orders: s.orders.map((o) => (o.id === id ? updated : o)),
+          syncState: 'synced',
+          syncError: null,
+        }))
+        return updated
+      },
+
       removeOrder: async (id) => {
         set((s) => ({ orders: s.orders.filter((o) => o.id !== id) }))
         try {
@@ -310,4 +342,35 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   in_progress: 'In progress',
   done: 'Done',
   cancelled: 'Cancelled',
+}
+
+export const TRACKING_STATUS_LABEL: Record<TrackingStatus, string> = {
+  unknown: 'Unknown',
+  pre_transit: 'Pre-transit',
+  in_transit: 'In transit',
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered',
+  exception: 'Exception',
+  expired: 'Expired',
+}
+
+export function carrierTrackingUrl(
+  carrier: string | undefined,
+  trackingNumber: string,
+): string {
+  const n = trackingNumber.trim()
+  const c = (carrier || '').trim().toLowerCase()
+  if (c.includes('usps')) {
+    return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(n)}`
+  }
+  if (c.includes('ups')) {
+    return `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`
+  }
+  if (c.includes('fedex')) {
+    return `https://www.fedex.com/fedextrack/?trknbr=${encodeURIComponent(n)}`
+  }
+  if (c.includes('dhl')) {
+    return `https://www.dhl.com/us-en/home/tracking/tracking-express.html?submit=1&tracking-id=${encodeURIComponent(n)}`
+  }
+  return `https://www.google.com/search?q=${encodeURIComponent(`${carrier || ''} ${n}`.trim())}`
 }

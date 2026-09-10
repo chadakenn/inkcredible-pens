@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "stripe:server": "node server/stripe-checkout.mjs"
+    "stripe:server": "node server/stripe-checkout.mjs",
+    "test:tracking": "node scripts/test-tracking.mjs"
   },
   "dependencies": {
     "cors": "^2.8.6",

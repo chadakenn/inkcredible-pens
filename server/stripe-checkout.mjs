@@ -11,6 +11,7 @@ import Stripe from 'stripe'
 import { readFileSync, existsSync } from 'node:fs'
 import { mountUploads, startRetentionJobs } from './uploads.mjs'
 import { mountOrders, createPaidOrder, findOrderByStripeSession } from './orders.mjs'
+import { mountTracking, startTrackingPoll } from './tracking.mjs'
 import { mountCatalog } from './catalog.mjs'
 import { mountScents } from './scents.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
@@ -166,6 +167,7 @@ app.use(express.json({ limit: '2mb' }))
 mountAdminAuth(app)
 mountUploads(app)
 mountOrders(app)
+mountTracking(app)
 mountCatalog(app)
 mountScents(app)
 
@@ -175,6 +177,10 @@ app.get('/api/health', (_req, res) => {
     stripe: Boolean(secret),
     webhook: Boolean(webhookSecret),
     productionHardening: isProductionHardening(),
+    trackingConfigured: Boolean(
+      typeof process.env.TRACK17_API_KEY === 'string' &&
+        process.env.TRACK17_API_KEY.trim(),
+    ),
   })
 })
 
@@ -563,4 +569,5 @@ app.listen(PORT, BIND_HOST, () => {
     }
   }
   startRetentionJobs({ cleanupCheckouts: cleanupAbandonedCheckouts })
+  startTrackingPoll()
 })

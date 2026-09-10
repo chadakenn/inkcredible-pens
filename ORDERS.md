@@ -42,3 +42,14 @@ Vite proxies `/api` → `http://127.0.0.1:4242`.
 ## Production deploy
 
 See [DEPLOY.md](./DEPLOY.md) for Proxmox + Cloudflare cutover and `scripts/deploy.sh`.
+
+## Package tracking (17TRACK)
+
+Optional automatic watch + auto-mark **delivered** → `done`. See **[TRACKING.md](./TRACKING.md)**.
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `POST` | `/api/orders/:id/tracking/refresh` | Admin force refresh (auth) |
+| `POST` | `/api/orders/tracking/refresh-all` | Admin poll all (auth) |
+
+Requires `TRACK17_API_KEY` in `.env`. Without it, watching is disabled.

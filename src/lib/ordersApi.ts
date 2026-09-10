@@ -122,3 +122,25 @@ export async function deleteOrder(id: string): Promise<void> {
     )
   }
 }
+
+export async function refreshOrderTracking(id: string): Promise<Order> {
+  const res = await fetch(
+    `/api/orders/${encodeURIComponent(id)}/tracking/refresh`,
+    {
+      method: 'POST',
+      headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+    },
+  )
+  const data = (await parseJson(res)) as {
+    order?: Order
+    error?: string
+  } | null
+  if (!res.ok || !data?.order) {
+    throw new OrdersApiError(
+      data?.error || `refresh_failed_${res.status}`,
+      res.status,
+      data?.error || 'refresh_failed',
+    )
+  }
+  return data.order
+}

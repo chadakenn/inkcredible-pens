@@ -10,10 +10,13 @@ import type { CustomLogoMeta } from '../../data/products'
 import { customPreviewSrc, downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 import {
   ORDER_STATUS_LABEL,
+  TRACKING_STATUS_LABEL,
+  carrierTrackingUrl,
   ordersNewestFirst,
   useOrders,
   type Order,
   type OrderStatus,
+  type TrackingStatus,
 } from '../../store/orders'
 
 const STATUS_BTNS: { id: OrderStatus; className: string }[] = [
@@ -23,7 +26,7 @@ const STATUS_BTNS: { id: OrderStatus; className: string }[] = [
   { id: 'cancelled', className: 'bg-pink text-white' },
 ]
 
-const CARRIERS = ['USPS', 'UPS', 'FedEx', 'Other'] as const
+const CARRIERS = ['USPS', 'UPS', 'FedEx', 'DHL', 'Other'] as const
 
 function formatWhen(iso: string): string {
   try {
@@ -38,6 +41,49 @@ function formatWhen(iso: string): string {
   } catch {
     return iso
   }
+}
+
+
+function trackingChipClass(status?: TrackingStatus): string {
+  switch (status) {
+    case 'delivered':
+      return 'bg-lime/15 text-lime'
+    case 'out_for_delivery':
+      return 'bg-cyan/15 text-cyan'
+    case 'in_transit':
+    case 'pre_transit':
+      return 'bg-lavender/20 text-lavender'
+    case 'exception':
+    case 'expired':
+      return 'bg-pink/20 text-pink'
+    default:
+      return 'bg-ink text-mute'
+  }
+}
+
+function TrackingStatusChip({ order }: { order: Order }) {
+  if (!order.trackingNumber) return null
+  if (order.deliveredAt || order.trackingStatus === 'delivered') {
+    return (
+      <span className="rounded-full bg-lime/15 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-lime">
+        Delivered
+      </span>
+    )
+  }
+  if (order.trackingStatus && order.trackingStatus !== 'unknown') {
+    return (
+      <span
+        className={`rounded-full px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide ${trackingChipClass(order.trackingStatus)}`}
+      >
+        {TRACKING_STATUS_LABEL[order.trackingStatus]}
+      </span>
+    )
+  }
+  return (
+    <span className="rounded-full bg-lime/15 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-lime">
+      Tracked
+    </span>
+  )
 }
 
 function itemMetaLine(custom?: CustomLogoMeta): string | null {
@@ -113,11 +159,13 @@ function OrderCard({
 }) {
   const setStatus = useOrders((s) => s.setStatus)
   const setTracking = useOrders((s) => s.setTracking)
+  const refreshTracking = useOrders((s) => s.refreshTracking)
   const removeOrder = useOrders((s) => s.removeOrder)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [carrier, setCarrier] = useState(order.trackingCarrier || 'USPS')
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '')
   const [trackingSaving, setTrackingSaving] = useState(false)
+  const [trackingRefreshing, setTrackingRefreshing] = useState(false)
   const [trackingMsg, setTrackingMsg] = useState<string | null>(null)
 
   useEffect(() => {
@@ -148,11 +196,7 @@ function OrderCard({
               {ORDER_STATUS_LABEL[order.status]}
             </span>
             <span className="text-xs text-mute">{formatWhen(order.createdAt)} ET</span>
-            {order.trackingNumber ? (
-              <span className="rounded-full bg-lime/15 px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wide text-lime">
-                Tracked
-              </span>
-            ) : null}
+            <TrackingStatusChip order={order} />
           </div>
           <p className="mt-1 font-display text-xl text-cream">{order.customer.name}</p>
           <p className="truncate text-sm text-mute">{order.customer.email}</p>
@@ -314,8 +358,8 @@ function OrderCard({
                     trackingNumber: trackingNumber.trim(),
                   }).finally(() => {
                     setTrackingSaving(false)
-                    setTrackingMsg('Tracking saved')
-                    window.setTimeout(() => setTrackingMsg(null), 2000)
+                    setTrackingMsg('Tracking saved — watching shipment')
+                    window.setTimeout(() => setTrackingMsg(null), 2500)
                   })
                 }}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-lime px-4 text-sm font-extrabold text-ink transition hover:bg-lime-hot disabled:cursor-not-allowed disabled:opacity-40"
@@ -323,22 +367,89 @@ function OrderCard({
                 Save tracking
               </button>
               {order.trackingNumber ? (
-                <a
-                  href={`https://www.google.com/search?q=${encodeURIComponent(
-                    `${order.trackingCarrier ? order.trackingCarrier + ' ' : ''}${order.trackingNumber}`,
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan/40 bg-cyan/10 px-3 text-xs font-extrabold text-cyan transition hover:bg-cyan/20"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Track package
-                </a>
+                <>
+                  <button
+                    type="button"
+                    disabled={trackingRefreshing}
+                    onClick={() => {
+                      setTrackingRefreshing(true)
+                      setTrackingMsg(null)
+                      void refreshTracking(order.id)
+                        .then((updated) => {
+                          const label =
+                            updated.trackingStatus === 'delivered' || updated.deliveredAt
+                              ? 'Delivered — marked Done'
+                              : updated.trackingStatus
+                                ? TRACKING_STATUS_LABEL[updated.trackingStatus]
+                                : 'Updated'
+                          setTrackingMsg(label)
+                          window.setTimeout(() => setTrackingMsg(null), 2500)
+                        })
+                        .catch((err) => {
+                          const code =
+                            err && typeof err === 'object' && 'code' in err
+                              ? String((err as { code: string }).code)
+                              : ''
+                          setTrackingMsg(
+                            code === 'tracking_not_configured'
+                              ? 'Tracking not configured (set TRACK17_API_KEY)'
+                              : err instanceof Error
+                                ? err.message
+                                : 'Refresh failed',
+                          )
+                        })
+                        .finally(() => setTrackingRefreshing(false))
+                    }}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink-2 px-3 text-xs font-extrabold text-cream transition hover:border-cyan disabled:opacity-40"
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${trackingRefreshing ? 'animate-spin' : ''}`}
+                    />
+                    Refresh tracking
+                  </button>
+                  <a
+                    href={carrierTrackingUrl(order.trackingCarrier, order.trackingNumber)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan/40 bg-cyan/10 px-3 text-xs font-extrabold text-cyan transition hover:bg-cyan/20"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Track package
+                  </a>
+                </>
               ) : null}
               {trackingMsg && (
                 <span className="text-xs font-bold text-lime">{trackingMsg}</span>
               )}
             </div>
+            {(order.trackingStatus || order.trackingDetail || order.trackingCheckedAt) && (
+              <div className="mt-3 rounded-xl border border-line/80 bg-ink-2 px-3 py-2 text-[11px] text-mute">
+                <p className="flex flex-wrap items-center gap-2 font-bold text-cream">
+                  Status:{' '}
+                  {order.trackingStatus
+                    ? TRACKING_STATUS_LABEL[order.trackingStatus]
+                    : 'Pending'}
+                  {(order.deliveredAt || order.trackingStatus === 'delivered') && (
+                    <span className="rounded-full bg-lime/20 px-2 py-0.5 text-[10px] font-extrabold uppercase text-lime">
+                      Delivered
+                    </span>
+                  )}
+                </p>
+                {order.trackingDetail && (
+                  <p className="mt-1 text-mute">{order.trackingDetail}</p>
+                )}
+                {order.trackingCheckedAt && (
+                  <p className="mt-1 text-mute">
+                    Last checked {formatWhen(order.trackingCheckedAt)} ET
+                  </p>
+                )}
+                {order.deliveredAt && (
+                  <p className="mt-1 text-lime">
+                    Delivered {formatWhen(order.deliveredAt)} ET
+                  </p>
+                )}
+              </div>
+            )}
             {order.shippedAt && (
               <p className="mt-2 text-[11px] text-mute">
                 Shipped {formatWhen(order.shippedAt)} ET

@@ -168,6 +168,29 @@ export function findOrderById(id) {
   return readOrders().find((o) => o.id === id) ?? null
 }
 
+export function listOrders() {
+  return readOrders()
+}
+
+/**
+ * Atomic read-modify-write for a single order.
+ * @param {string} id
+ * @param {(order: object) => object} mutator
+ * @returns {object | null}
+ */
+export function updateOrderById(id, mutator) {
+  const orders = readOrders()
+  const idx = orders.findIndex((o) => o.id === id)
+  if (idx < 0) return null
+  const next = mutator({ ...orders[idx] })
+  if (!next || typeof next !== 'object') {
+    throw new Error('invalid_mutator_result')
+  }
+  orders[idx] = next
+  writeOrders(orders)
+  return orders[idx]
+}
+
 /**
  * @param {import('express').Express} app
  */
@@ -267,7 +290,14 @@ export function mountOrders(app) {
 
     orders[idx] = next
     writeOrders(orders)
-    return res.json({ order: orders[idx] })
+    const saved = orders[idx]
+    // When tracking number is present after this PATCH, ask 17track to watch.
+    if (saved.trackingNumber && (hasNumber || hasCarrier)) {
+      void import('./tracking.mjs')
+        .then((m) => m.maybeWatchAfterTrackingSave(saved))
+        .catch((err) => console.warn('[orders] tracking watch hook failed', err))
+    }
+    return res.json({ order: saved })
   })
 
   app.delete('/api/orders/:id', requireAdmin, (req, res) => {

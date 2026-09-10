@@ -78,6 +78,8 @@ TRUST_PROXY=1                   # CF Tunnel or Caddy → Node; use 2 if CF → C
 ADMIN_PIN=....                  # REQUIRED strong PIN — NOT 1234 (boot refuses default)
 # ADMIN_SESSION_SECRET=...      # optional; auto-generated under data/admin/ if omitted
 # UPLOAD_RETENTION_DAYS=7
+# TRACK17_API_KEY=...          # optional — package watch; see TRACKING.md
+# TRACKING_POLL_MINUTES=45
 # CHECKOUT_RETENTION_DAYS=7
 ```
 
