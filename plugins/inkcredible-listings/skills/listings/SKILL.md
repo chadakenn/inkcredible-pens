@@ -16,5 +16,6 @@ Use the Inkcredible Listings MCP tools for storefront catalog work.
 5. Show the user the complete proposed title, price, category, tagline, description, and photo state.
 6. Do not call `publish_listing` until the user explicitly confirms that final summary.
 7. Treat live updates and deletion the same way: show the exact change and obtain explicit confirmation first.
+8. Use `replace_live_listing_photo` for a missing or incorrect live product image, only after the user confirms the exact listing and replacement photo.
 
 Drafts are private to the signed-in account. Publishing makes the product immediately visible on the storefront.

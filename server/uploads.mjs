@@ -320,10 +320,11 @@ export function productUploadFilenameFromUrl(imageUrl) {
 export function deleteProductUploadIfUnreferenced(imageUrl, catalogProducts) {
   const filename = productUploadFilenameFromUrl(imageUrl)
   if (!filename) return { deleted: false, filename: null }
-  const stillUsed = (Array.isArray(catalogProducts) ? catalogProducts : []).some(
+  const stillUsedByProduct = (Array.isArray(catalogProducts) ? catalogProducts : []).some(
     (p) => productUploadFilenameFromUrl(p?.imageUrl) === filename,
   )
-  if (stillUsed) return { deleted: false, filename }
+  const stillUsedByDraft = referencedDraftProductUploadFilenames().has(filename)
+  if (stillUsedByProduct || stillUsedByDraft) return { deleted: false, filename }
   const full = path.join(PRODUCT_UPLOAD_DIR, filename)
   if (!existsSync(full)) return { deleted: false, filename }
   try {
@@ -334,6 +335,34 @@ export function deleteProductUploadIfUnreferenced(imageUrl, catalogProducts) {
     console.error('[uploads] failed to remove product photo', filename, err)
     return { deleted: false, filename }
   }
+}
+
+/**
+ * Product photos attached to unpublished ChatGPT listing drafts must count as
+ * referenced, otherwise the startup orphan sweep can delete them before publish.
+ */
+export function referencedDraftProductUploadFilenames(
+  draftDir = path.resolve(__dirname, '../data/catalog/drafts'),
+) {
+  const referenced = new Set()
+  if (!existsSync(draftDir)) return referenced
+  try {
+    const files = readdirSync(draftDir).filter((name) =>
+      /^[a-f0-9-]{36}\.json$/i.test(name),
+    )
+    for (const name of files) {
+      try {
+        const draft = readJsonFile(path.join(draftDir, name))
+        const filename = productUploadFilenameFromUrl(draft?.imageUrl)
+        if (filename) referenced.add(filename)
+      } catch (err) {
+        console.error('[uploads] listing draft read for product refs failed', name, err)
+      }
+    }
+  } catch (err) {
+    console.error('[uploads] listing draft scan for product refs failed', err)
+  }
+  return referenced
 }
 
 /**
@@ -358,6 +387,7 @@ export function cleanupOrphanProductUploads(maxAgeMs = 0) {
     const name = productUploadFilenameFromUrl(p?.imageUrl)
     if (name) referenced.add(name)
   }
+  for (const name of referencedDraftProductUploadFilenames()) referenced.add(name)
   const now = Date.now()
   let removed = 0
   let scanned = 0

@@ -12,7 +12,10 @@ import {
   validateProductShape,
   writeProducts,
 } from './catalog.mjs'
-import { saveProductImageBuffer } from './uploads.mjs'
+import {
+  deleteProductUploadIfUnreferenced,
+  saveProductImageBuffer,
+} from './uploads.mjs'
 import { readJsonFile, writeJsonAtomic } from './security.mjs'
 
 const DRAFT_DIR = path.join(CATALOG_DIR, 'drafts')
@@ -239,6 +242,37 @@ export function createListingsMcpServer(actor) {
     draft.imageUrl = saved.url
     saveDraft(draft)
     return result({ draft, photo: { url: saved.url, mime: saved.mime, size: saved.size } })
+  })
+
+  server.registerTool('replace_live_listing_photo', {
+    title: 'Replace a live listing photo',
+    description: 'Upload and attach a replacement JPEG, PNG, WebP, or GIF photo to an existing live listing. Call only after the user explicitly confirms the listing ID and replacement photo.',
+    inputSchema: {
+      listingId: z.string().min(1).max(120),
+      imageBase64: z.string().min(16),
+      confirmed: z.literal(true).describe('Must be true only after explicit user confirmation.'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  }, async ({ listingId, imageBase64 }) => {
+    const clean = imageBase64.replace(/\s/g, '')
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(clean)) throw new Error('invalid_base64')
+    const buffer = Buffer.from(clean, 'base64')
+    if (!buffer.length || buffer.length > 8 * 1024 * 1024) throw new Error('invalid_image_size')
+    const products = readProducts()
+    const index = products.findIndex((item) => item.id === listingId)
+    if (index < 0) throw new Error('listing_not_found')
+    const previousUrl = products[index].imageUrl
+    const saved = saveProductImageBuffer(buffer)
+    products[index] = { ...products[index], imageUrl: saved.url }
+    writeProducts(products)
+    if (previousUrl && previousUrl !== saved.url) {
+      deleteProductUploadIfUnreferenced(previousUrl, products)
+    }
+    return result({
+      product: products[index],
+      photo: { url: saved.url, mime: saved.mime, size: saved.size },
+      updatedBy: actor.email,
+    }, `The live photo for ${products[index].name} was replaced.`)
   })
 
   server.registerTool('publish_listing', {
