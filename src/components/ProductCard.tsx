@@ -31,7 +31,7 @@ export default function ProductCard({ product }: { product: Product }) {
   return (
     <article className="card-shine group flex flex-col rounded-2xl border border-line bg-ink-2 transition hover:-translate-y-1 hover:border-cyan/40 hover:shadow-[0_12px_36px_rgba(34,211,238,0.1)]">
       <Link to={to} className="relative block w-full overflow-hidden rounded-t-2xl text-left">
-        <div className="aspect-[4/3] bg-ink-3">
+        <div className={product.category === 'Canvas' ? 'aspect-square bg-ink-3' : 'aspect-[4/3] bg-ink-3'}>
           <ProductArt product={product} className="h-full w-full" />
         </div>
         {product.badge && (

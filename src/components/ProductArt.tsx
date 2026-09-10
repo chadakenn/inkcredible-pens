@@ -125,7 +125,9 @@ export default function ProductArt({
       <img
         src={product.imageUrl}
         alt={product.name}
-        className={`h-full w-full object-cover object-center transition-opacity duration-300 ${
+        className={`h-full w-full object-center transition-opacity duration-300 ${
+          product.category === 'Canvas' ? 'object-contain' : 'object-cover'
+        } ${
           loaded ? 'opacity-100' : 'opacity-0'
         }`}
         loading="lazy"
