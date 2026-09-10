@@ -1,5 +1,5 @@
 /**
- * Unit-ish: mock 17track "Delivered" payload → order becomes done + deliveredAt.
+ * Unit-ish: mock 17track "Delivered" payload → order remains shipped + deliveredAt.
  * Run: node scripts/test-tracking.mjs
  */
 import assert from 'node:assert/strict'
@@ -44,7 +44,7 @@ assert.match(parsed.trackingDetail, /Delivered/i)
 
 const order = {
   id: 'ord-test',
-  status: 'in_progress',
+  status: 'making',
   trackingNumber: mockAccepted.number,
   trackingCarrier: 'USPS',
 }
@@ -55,7 +55,7 @@ const next = applyTrackingToOrder(order, {
   trackingCheckedAt: checkedAt,
 })
 
-assert.equal(next.status, 'done')
+assert.equal(next.status, 'shipped')
 assert.equal(next.trackingStatus, 'delivered')
 assert.equal(next.deliveredAt, checkedAt)
 assert.equal(next.trackingCheckedAt, checkedAt)
@@ -67,7 +67,7 @@ const again = applyTrackingToOrder(next, {
   trackingCheckedAt: '2026-09-10T00:00:00.000Z',
 })
 assert.equal(again.deliveredAt, checkedAt)
-assert.equal(again.status, 'done')
+assert.equal(again.status, 'shipped')
 
 // Mock fetch path: simulate gettrackinfo → apply
 const mockFetch = async () => ({
@@ -92,10 +92,10 @@ const fromApi = parse(accepted)
 assert.equal(fromApi.trackingStatus, 'delivered')
 
 const applied = applyTrackingToOrder(
-  { ...order, status: 'in_progress' },
+  { ...order, status: 'making' },
   { ...fromApi, trackingCheckedAt: checkedAt },
 )
-assert.equal(applied.status, 'done')
+assert.equal(applied.status, 'shipped')
 assert.equal(applied.deliveredAt, checkedAt)
 
-console.log('ok — delivered payload maps to status=done + deliveredAt')
+console.log('ok — delivered payload keeps status=shipped + deliveredAt')

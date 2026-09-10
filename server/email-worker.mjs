@@ -349,7 +349,7 @@ async function runOnce() {
         }
       }
       await attempt(state, order, 'customer', String(order.customer?.email || '').trim(), customerMessage)
-      if (order.trackingNumber) {
+      if (order.status === 'shipped' && order.trackingNumber) {
         await attempt(state, order, 'shipment', String(order.customer?.email || '').trim(), shipmentMessage)
       }
     }

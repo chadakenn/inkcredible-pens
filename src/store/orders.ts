@@ -11,7 +11,7 @@ import {
   type OrdersSyncState,
 } from '../lib/ordersApi'
 
-export type OrderStatus = 'new' | 'in_progress' | 'done' | 'cancelled'
+export type OrderStatus = 'new' | 'making' | 'ready' | 'shipped' | 'cancelled'
 
 export type TrackingStatus =
   | 'unknown'
@@ -88,6 +88,7 @@ interface OrdersState {
   placeOrderFromStripe: (input: PlaceOrderFromStripeInput) => Promise<Order>
   setStatus: (id: string, status: OrderStatus) => Promise<void>
   setTracking: (id: string, tracking: OrderTrackingInput) => Promise<void>
+  markShipped: (id: string, tracking: OrderTrackingInput) => Promise<void>
   refreshTracking: (id: string) => Promise<Order>
   patchLocalOrder: (order: Order) => void
   removeOrder: (id: string) => Promise<void>
@@ -250,10 +251,6 @@ export const useOrders = create<OrdersState>()(
       setTracking: async (id, tracking) => {
         const carrier = tracking.carrier.trim()
         const trackingNumber = tracking.trackingNumber.trim()
-        const existing = get().orders.find((o) => o.id === id)
-        const nextStatus: OrderStatus | undefined =
-          existing?.status === 'new' ? 'in_progress' : undefined
-        const shippedAt = new Date().toISOString()
 
         set((s) => ({
           orders: s.orders.map((o) =>
@@ -262,25 +259,16 @@ export const useOrders = create<OrdersState>()(
                   ...o,
                   trackingCarrier: carrier || undefined,
                   trackingNumber: trackingNumber || undefined,
-                  shippedAt: trackingNumber ? shippedAt : o.shippedAt,
-                  ...(nextStatus ? { status: nextStatus } : {}),
                 }
               : o,
           ),
         }))
 
         try {
-          const patch: {
-            trackingCarrier: string | null
-            trackingNumber: string | null
-            shippedAt?: string
-            status?: OrderStatus
-          } = {
+          const patch = {
             trackingCarrier: carrier || null,
             trackingNumber: trackingNumber || null,
           }
-          if (trackingNumber) patch.shippedAt = shippedAt
-          if (nextStatus) patch.status = nextStatus
           const updated = await apiPatchOrder(id, patch)
           set((s) => ({
             orders: s.orders.map((o) => (o.id === id ? updated : o)),
@@ -292,6 +280,30 @@ export const useOrders = create<OrdersState>()(
             syncState: 'error',
             syncError: 'Could not sync tracking — saved locally',
           })
+        }
+      },
+
+      markShipped: async (id, tracking) => {
+        const carrier = tracking.carrier.trim() || 'Other'
+        const trackingNumber = tracking.trackingNumber.trim()
+        if (!trackingNumber) throw new Error('Add a tracking number first.')
+        const shippedAt = new Date().toISOString()
+
+        try {
+          const updated = await apiPatchOrder(id, {
+            status: 'shipped',
+            trackingCarrier: carrier,
+            trackingNumber,
+            shippedAt,
+          })
+          set((s) => ({
+            orders: s.orders.map((o) => (o.id === id ? updated : o)),
+            syncState: 'synced',
+            syncError: null,
+          }))
+        } catch (error) {
+          set({ syncState: 'error', syncError: 'Could not mark the order shipped.' })
+          throw error
         }
       },
 
@@ -339,8 +351,9 @@ export function ordersNewestFirst(orders: Order[]): Order[] {
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   new: 'New',
-  in_progress: 'In progress',
-  done: 'Done',
+  making: 'Making',
+  ready: 'Ready',
+  shipped: 'Shipped',
   cancelled: 'Cancelled',
 }
 

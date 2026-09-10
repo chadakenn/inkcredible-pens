@@ -21,8 +21,9 @@ import {
 
 const STATUS_BTNS: { id: OrderStatus; className: string }[] = [
   { id: 'new', className: 'bg-cyan text-ink' },
-  { id: 'in_progress', className: 'bg-lavender text-ink' },
-  { id: 'done', className: 'bg-lime text-ink' },
+  { id: 'making', className: 'bg-lavender text-ink' },
+  { id: 'ready', className: 'bg-amber-300 text-ink' },
+  { id: 'shipped', className: 'bg-lime text-ink' },
   { id: 'cancelled', className: 'bg-pink text-white' },
 ]
 
@@ -159,6 +160,7 @@ function OrderCard({
 }) {
   const setStatus = useOrders((s) => s.setStatus)
   const setTracking = useOrders((s) => s.setTracking)
+  const markShipped = useOrders((s) => s.markShipped)
   const refreshTracking = useOrders((s) => s.refreshTracking)
   const removeOrder = useOrders((s) => s.removeOrder)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -186,9 +188,11 @@ function OrderCard({
               className={`rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide ${
                 order.status === 'new'
                   ? 'bg-cyan/20 text-cyan'
-                  : order.status === 'in_progress'
+                  : order.status === 'making'
                     ? 'bg-lavender/20 text-lavender'
-                    : order.status === 'done'
+                    : order.status === 'ready'
+                      ? 'bg-amber-300/20 text-amber-200'
+                      : order.status === 'shipped'
                       ? 'bg-lime/20 text-lime'
                       : 'bg-pink/20 text-pink'
               }`}
@@ -358,13 +362,37 @@ function OrderCard({
                     trackingNumber: trackingNumber.trim(),
                   }).finally(() => {
                     setTrackingSaving(false)
-                    setTrackingMsg('Tracking saved — watching shipment')
+                    setTrackingMsg('Tracking saved — customer has not been emailed yet')
                     window.setTimeout(() => setTrackingMsg(null), 2500)
                   })
                 }}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-lime px-4 text-sm font-extrabold text-ink transition hover:bg-lime-hot disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Save tracking
+                Save tracking only
+              </button>
+              <button
+                type="button"
+                disabled={trackingSaving || !trackingNumber.trim()}
+                onClick={() => {
+                  setTrackingSaving(true)
+                  setTrackingMsg(null)
+                  void markShipped(order.id, {
+                    carrier: carrier.trim() || 'Other',
+                    trackingNumber: trackingNumber.trim(),
+                  })
+                    .then(() => {
+                      setTrackingMsg('Marked shipped — customer email queued')
+                      window.setTimeout(() => setTrackingMsg(null), 3500)
+                    })
+                    .catch((error) => {
+                      setTrackingMsg(error instanceof Error ? error.message : 'Could not mark shipped')
+                    })
+                    .finally(() => setTrackingSaving(false))
+                }}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan px-4 text-sm font-extrabold text-ink transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Truck className="h-4 w-4" />
+                Mark shipped &amp; email customer
               </button>
               {order.trackingNumber ? (
                 <>
@@ -378,7 +406,7 @@ function OrderCard({
                         .then((updated) => {
                           const label =
                             updated.trackingStatus === 'delivered' || updated.deliveredAt
-                              ? 'Delivered — marked Done'
+                              ? 'Delivered'
                               : updated.trackingStatus
                                 ? TRACKING_STATUS_LABEL[updated.trackingStatus]
                                 : 'Updated'
@@ -460,18 +488,37 @@ function OrderCard({
 
           <div>
             <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-mute">
-              Change status
+              Order progress
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {STATUS_BTNS.map((btn) => (
                 <button
                   key={btn.id}
                   type="button"
-                  onClick={() => void setStatus(order.id, btn.id)}
+                  onClick={() => {
+                    if (btn.id === 'shipped') {
+                      if (!trackingNumber.trim()) {
+                        setTrackingMsg('Add a tracking number before marking this shipped.')
+                        return
+                      }
+                      setTrackingSaving(true)
+                      setTrackingMsg(null)
+                      void markShipped(order.id, {
+                        carrier: carrier.trim() || 'Other',
+                        trackingNumber: trackingNumber.trim(),
+                      })
+                        .then(() => setTrackingMsg('Marked shipped — customer email queued'))
+                        .catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not mark shipped'))
+                        .finally(() => setTrackingSaving(false))
+                      return
+                    }
+                    void setStatus(order.id, btn.id)
+                  }}
+                  disabled={trackingSaving && btn.id === 'shipped'}
                   className={`min-h-12 rounded-2xl px-2 text-sm font-extrabold transition active:scale-[0.98] ${
                     order.status === btn.id
                       ? btn.className
-                      : 'border border-line bg-ink text-mute hover:text-cream'
+                      : 'border border-line bg-ink text-mute hover:text-cream disabled:opacity-40'
                   }`}
                 >
                   {ORDER_STATUS_LABEL[btn.id]}

@@ -18,7 +18,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ORDERS_DIR = path.resolve(__dirname, '../data/orders')
 export const ORDERS_FILE = path.join(ORDERS_DIR, 'orders.json')
 
-const STATUSES = new Set(['new', 'in_progress', 'done', 'cancelled'])
+const STATUSES = new Set(['new', 'making', 'ready', 'shipped', 'cancelled'])
+const LEGACY_STATUS = { in_progress: 'making', done: 'shipped' }
 
 mkdirSync(ORDERS_DIR, { recursive: true })
 
@@ -44,8 +45,13 @@ function newDisplayCode(orders) {
 function readOrders() {
   const data = readJsonFile(ORDERS_FILE)
   if (data == null) return []
-  if (Array.isArray(data)) return data
-  if (data && Array.isArray(data.orders)) return data.orders
+  const orders = Array.isArray(data) ? data : data && Array.isArray(data.orders) ? data.orders : null
+  if (orders) {
+    return orders.map((order) => ({
+      ...order,
+      status: LEGACY_STATUS[order.status] || (STATUSES.has(order.status) ? order.status : 'new'),
+    }))
+  }
   console.error('[orders] unexpected JSON shape — refusing empty fallback')
   throw new CorruptJsonError(ORDERS_FILE, new Error('unexpected_shape'))
 }
@@ -254,7 +260,12 @@ export function mountOrders(app) {
 
     const next = { ...orders[idx] }
 
-    if (hasStatus) next.status = body.status
+    if (hasStatus) {
+      next.status = body.status
+      if (body.status === 'shipped' && !next.shippedAt && !hasShippedAt) {
+        next.shippedAt = new Date().toISOString()
+      }
+    }
 
     if (hasCarrier) {
       if (body.trackingCarrier == null || body.trackingCarrier === '') {
@@ -284,8 +295,6 @@ export function mountOrders(app) {
       } else {
         return res.status(400).json({ error: 'invalid_shippedAt' })
       }
-    } else if ((hasNumber || hasCarrier) && next.trackingNumber && !next.shippedAt) {
-      next.shippedAt = new Date().toISOString()
     }
 
     orders[idx] = next

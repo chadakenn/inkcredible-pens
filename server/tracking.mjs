@@ -137,7 +137,7 @@ export function parse17TrackPayload(payload) {
 }
 
 /**
- * Apply tracking fields onto an order; when delivered, set status=done + deliveredAt (idempotent).
+ * Apply tracking fields onto an order; when delivered, keep it shipped and record delivery (idempotent).
  * Pure — returns next order object (does not write).
  * @param {object} order
  * @param {{ trackingStatus: TrackingStatus, trackingDetail?: string, trackingCheckedAt?: string }} info
@@ -152,7 +152,7 @@ export function applyTrackingToOrder(order, info) {
   }
 
   if (info.trackingStatus === 'delivered') {
-    next.status = 'done'
+    next.status = 'shipped'
     if (!next.deliveredAt) {
       next.deliveredAt = now
     }
