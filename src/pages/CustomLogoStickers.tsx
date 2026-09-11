@@ -312,31 +312,6 @@ export default function CustomLogoStickers() {
               </div>
               <p className="mb-3 text-xs text-mute">{cut.helper}</p>
 
-              <div className="mb-4">
-                <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-mute">
-                  Size
-                </p>
-                <div className="inline-flex flex-wrap gap-0.5 rounded-full border border-line p-0.5">
-                  {LOGO_STICKER_SIZES.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setSizeId(s.id)
-                        setNudgeUpload(false)
-                      }}
-                      className={`min-h-9 rounded-full px-3 text-xs font-bold transition ${
-                        sizeId === s.id
-                          ? 'bg-cream text-ink'
-                          : 'text-mute hover:text-cream'
-                      }`}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
                 <div
                   className={`relative flex h-44 w-44 shrink-0 items-center justify-center overflow-hidden border-4 shadow-[0_0_32px_rgba(34,211,238,0.2)] ${
@@ -454,40 +429,51 @@ export default function CustomLogoStickers() {
             </div>
 
             <div className="rounded-3xl border border-line bg-ink-2 p-4 sm:p-5">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-mute">
-                Quantity
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setQty(style.packQty)}
-                  className={`min-h-12 min-w-[5.5rem] rounded-2xl border px-4 py-2 font-display text-lg transition ${
-                    qty === style.packQty
-                      ? 'border-lime bg-lime text-ink'
-                      : 'border-line bg-ink text-cream hover:border-lime/50'
-                  }`}
-                >
-                  {style.packQty}
-                </button>
-                {[style.packQty * 2, style.packQty * 4]
-                  .filter((n) => n !== style.packQty)
-                  .map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setQty(n)}
-                      className={`min-h-12 min-w-[5.5rem] rounded-2xl border px-4 py-2 font-display text-lg transition ${
-                        qty === n
-                          ? 'border-lime bg-lime text-ink'
-                          : 'border-line bg-ink text-cream hover:border-lime/50'
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-mute">Size</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {LOGO_STICKER_SIZES.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setSizeId(s.id)
+                          setNudgeUpload(false)
+                        }}
+                        className={`min-h-12 min-w-14 rounded-2xl border px-3 text-sm font-extrabold transition ${
+                          sizeId === s.id
+                            ? 'border-cyan bg-cream text-ink'
+                            : 'border-line bg-ink text-cream hover:border-cyan/50'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-mute">Quantity</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {[style.packQty, style.packQty * 2, style.packQty * 4].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setQty(n)}
+                        className={`min-h-12 min-w-[5.5rem] rounded-2xl border px-4 py-2 font-display text-lg transition ${
+                          qty === n
+                            ? 'border-lime bg-lime text-ink'
+                            : 'border-line bg-ink text-cream hover:border-lime/50'
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-4 flex items-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
                 <div className="inline-flex items-center rounded-full border border-line bg-ink">
                   <button
                     type="button"
