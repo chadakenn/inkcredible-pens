@@ -1,6 +1,6 @@
 /** Individual Store Manager accounts with scrypt password hashes and expiring HMAC sessions. */
 import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRateLimiter, isProductionHardening as _isProductionHardening, readJsonFile, writeJsonAtomic } from './security.mjs'
@@ -15,7 +15,8 @@ const TOKEN_TTL_MS = 1000 * 60 * 60 * 12
 const DUMMY_SALT = '8f8d41fcbfb95a7ca94aa9abf71e9c2f'
 const DUMMY_HASH = scryptSync('not-the-password', DUMMY_SALT, 64)
 
-mkdirSync(ADMIN_DIR, { recursive: true })
+mkdirSync(ADMIN_DIR, { recursive: true, mode: 0o700 })
+try { chmodSync(ADMIN_DIR, 0o700) } catch { /* service startup will surface later write errors */ }
 
 function safeEqual(a, b) {
   const ba = Buffer.isBuffer(a) ? a : Buffer.from(String(a), 'utf8')
@@ -33,6 +34,9 @@ function validateAccount(username, displayName, password) {
 }
 
 function readUsers() {
+  if (existsSync(USERS_FILE)) {
+    try { chmodSync(USERS_FILE, 0o600) } catch { /* retain compatibility with read-only deployments */ }
+  }
   const data = readJsonFile(USERS_FILE)
   if (data == null) return []
   if (Array.isArray(data)) return data
@@ -40,7 +44,7 @@ function readUsers() {
   throw new Error('invalid_admin_users_file')
 }
 
-function writeUsers(users) { writeJsonAtomic(USERS_FILE, { version: 1, users }, { keepBackups: 5 }) }
+function writeUsers(users) { writeJsonAtomic(USERS_FILE, { version: 1, users }, { keepBackups: 5, mode: 0o600 }) }
 function publicUser(user) { return { id: user.id, username: user.username, displayName: user.displayName, role: user.role || 'admin' } }
 
 function passwordMatches(user, password) {
@@ -76,6 +80,7 @@ function addAdminUser(input) {
 function getAdminPin() {
   try {
     if (existsSync(PIN_FILE)) {
+      try { chmodSync(PIN_FILE, 0o600) } catch { /* retain compatibility with read-only deployments */ }
       const data = JSON.parse(readFileSync(PIN_FILE, 'utf8'))
       if (typeof data?.pin === 'string' && data.pin.trim().length >= 4) return data.pin.trim()
     }
@@ -98,12 +103,13 @@ function loadOrCreateSessionSecret() {
   if (typeof process.env.ADMIN_SESSION_SECRET === 'string' && process.env.ADMIN_SESSION_SECRET.length >= 16) return process.env.ADMIN_SESSION_SECRET
   try {
     if (existsSync(SECRET_FILE)) {
+      try { chmodSync(SECRET_FILE, 0o600) } catch { /* retain compatibility with read-only deployments */ }
       const data = JSON.parse(readFileSync(SECRET_FILE, 'utf8'))
       if (typeof data?.secret === 'string' && data.secret.length >= 16) return data.secret
     }
   } catch (error) { console.error('[adminAuth] secret read failed', error) }
   const secret = randomBytes(32).toString('hex')
-  writeFileSync(SECRET_FILE, JSON.stringify({ secret, createdAt: new Date().toISOString() }, null, 2), 'utf8')
+  writeFileSync(SECRET_FILE, JSON.stringify({ secret, createdAt: new Date().toISOString() }, null, 2), { encoding: 'utf8', mode: 0o600 })
   console.log('[adminAuth] generated session secret →', SECRET_FILE)
   return secret
 }

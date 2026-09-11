@@ -1,11 +1,5 @@
-# TLS is automatic with Caddy when DNS for inkcrediblepens.org points here
-# (A/AAAA to this host, or Cloudflare Full/strict to the origin).
-
-www.inkcrediblepens.org {
-	redir https://inkcrediblepens.org{uri} permanent
-}
-
-inkcrediblepens.org {
+# Cloudflare provides the public HTTPS connection. Caddy receives HTTP at the origin.
+http://inkcredible.kennedyshome.com {
 	# Basic shop-oriented security headers
 	header {
 		X-Content-Type-Options nosniff

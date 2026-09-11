@@ -230,9 +230,6 @@ export const useOrders = create<OrdersState>()(
       },
 
       setStatus: async (id, status) => {
-        set((s) => ({
-          orders: s.orders.map((o) => (o.id === id ? { ...o, status } : o)),
-        }))
         try {
           const updated = await apiUpdateOrderStatus(id, status)
           set((s) => ({
@@ -240,29 +237,18 @@ export const useOrders = create<OrdersState>()(
             syncState: 'synced',
             syncError: null,
           }))
-        } catch {
+        } catch (error) {
           set({
             syncState: 'error',
-            syncError: 'Could not sync status — saved locally',
+            syncError: 'Could not save status — nothing was changed',
           })
+          throw error
         }
       },
 
       setTracking: async (id, tracking) => {
         const carrier = tracking.carrier.trim()
         const trackingNumber = tracking.trackingNumber.trim()
-
-        set((s) => ({
-          orders: s.orders.map((o) =>
-            o.id === id
-              ? {
-                  ...o,
-                  trackingCarrier: carrier || undefined,
-                  trackingNumber: trackingNumber || undefined,
-                }
-              : o,
-          ),
-        }))
 
         try {
           const patch = {
@@ -275,11 +261,12 @@ export const useOrders = create<OrdersState>()(
             syncState: 'synced',
             syncError: null,
           }))
-        } catch {
+        } catch (error) {
           set({
             syncState: 'error',
-            syncError: 'Could not sync tracking — saved locally',
+            syncError: 'Could not save tracking — nothing was changed',
           })
+          throw error
         }
       },
 

@@ -360,11 +360,15 @@ function OrderCard({
                   void setTracking(order.id, {
                     carrier: carrier.trim() || 'Other',
                     trackingNumber: trackingNumber.trim(),
-                  }).finally(() => {
-                    setTrackingSaving(false)
-                    setTrackingMsg('Tracking saved — customer has not been emailed yet')
-                    window.setTimeout(() => setTrackingMsg(null), 2500)
                   })
+                    .then(() => {
+                      setTrackingMsg('Tracking saved — customer has not been emailed yet')
+                      window.setTimeout(() => setTrackingMsg(null), 2500)
+                    })
+                    .catch((error) => {
+                      setTrackingMsg(error instanceof Error ? error.message : 'Could not save tracking')
+                    })
+                    .finally(() => setTrackingSaving(false))
                 }}
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-lime px-4 text-sm font-extrabold text-ink transition hover:bg-lime-hot disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -512,9 +516,19 @@ function OrderCard({
                         .finally(() => setTrackingSaving(false))
                       return
                     }
+                    setTrackingSaving(true)
+                    setTrackingMsg(null)
                     void setStatus(order.id, btn.id)
+                      .then(() => {
+                        setTrackingMsg(`Order marked ${ORDER_STATUS_LABEL[btn.id].toLowerCase()}`)
+                        window.setTimeout(() => setTrackingMsg(null), 2500)
+                      })
+                      .catch((error) => {
+                        setTrackingMsg(error instanceof Error ? error.message : 'Could not save status')
+                      })
+                      .finally(() => setTrackingSaving(false))
                   }}
-                  disabled={trackingSaving && btn.id === 'shipped'}
+                  disabled={trackingSaving}
                   className={`min-h-12 rounded-2xl px-2 text-sm font-extrabold transition active:scale-[0.98] ${
                     order.status === btn.id
                       ? btn.className

@@ -2,6 +2,7 @@
  * Shared production-hardening helpers: env signals, rate limits, magic bytes, JSON I/O.
  */
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -258,7 +259,7 @@ export class CorruptJsonError extends Error {
 /**
  * Atomic JSON write with rolling backups (file.bak + timestamped, keep last N).
  */
-export function writeJsonAtomic(filePath, data, { keepBackups = 5 } = {}) {
+export function writeJsonAtomic(filePath, data, { keepBackups = 5, mode } = {}) {
   const dir = path.dirname(filePath)
   mkdirSync(dir, { recursive: true })
   const payload = JSON.stringify(data, null, 2)
@@ -277,8 +278,9 @@ export function writeJsonAtomic(filePath, data, { keepBackups = 5 } = {}) {
   }
 
   const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`
-  writeFileSync(tmp, payload, 'utf8')
+  writeFileSync(tmp, payload, { encoding: 'utf8', ...(mode ? { mode } : {}) })
   renameSync(tmp, filePath)
+  if (mode) chmodSync(filePath, mode)
 }
 
 function rotateBackups(filePath, keepBackups) {
