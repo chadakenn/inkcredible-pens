@@ -8,6 +8,7 @@ import { formatCanvasCartMeta } from '../../data/canvasPrints'
 import { formatLogoCartMeta } from '../../data/logoStickers'
 import type { CustomLogoMeta } from '../../data/products'
 import { customPreviewSrc, downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
+import { paidSalesSummary } from '../../lib/salesSummary'
 import {
   ORDER_STATUS_LABEL,
   TRACKING_STATUS_LABEL,
@@ -608,6 +609,7 @@ export default function OrdersPanel() {
 
   const activeCount = orders.filter((order) => !order.archivedAt).length
   const archiveCount = orders.length - activeCount
+  const sales = useMemo(() => paidSalesSummary(orders), [orders])
   const sorted = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return ordersNewestFirst(orders).filter((order) => {
@@ -694,6 +696,26 @@ export default function OrdersPanel() {
           {syncError || 'Could not reach orders API'} — showing temporary local cache only. When Synced, Store Manager shows server orders only (no laptop demo ghosts).
         </p>
       )}
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-lime/40 bg-lime/10 p-4">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-lime">Total paid sales</p>
+          <p className="mt-1 font-display text-3xl text-cream">
+            {sales.total.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+          </p>
+          <p className="mt-1 text-xs text-mute">All paid Stripe orders · includes shipping</p>
+        </div>
+        <div className="rounded-2xl border border-cyan/40 bg-cyan/10 p-4">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-cyan">Paid orders</p>
+          <p className="mt-1 font-display text-3xl text-cream">{sales.paidOrders}</p>
+          <p className="mt-1 text-xs text-mute">Active and completed</p>
+        </div>
+        <div className="rounded-2xl border border-lavender/40 bg-lavender/10 p-4">
+          <p className="text-xs font-extrabold uppercase tracking-wider text-lavender">Completed</p>
+          <p className="mt-1 font-display text-3xl text-cream">{sales.archivedOrders}</p>
+          <p className="mt-1 text-xs text-mute">Orders in the archive</p>
+        </div>
+      </div>
 
       <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-line bg-ink p-1.5">
         <button type="button" onClick={() => { setView('active'); setExpandedId(null) }} className={`min-h-12 rounded-xl text-sm font-extrabold ${view === 'active' ? 'bg-cyan text-ink' : 'text-mute'}`}>

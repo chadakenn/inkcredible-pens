@@ -46,6 +46,7 @@ export interface Order {
   items: OrderItemSnapshot[]
   status: OrderStatus
   total: number
+  paid?: boolean
   stripeSessionId?: string
   shippingCents?: number
   trackingCarrier?: string
