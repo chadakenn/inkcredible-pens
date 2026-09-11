@@ -131,17 +131,6 @@ function OrderSuccessPanel({
           )}
         </div>
 
-        <p className="text-sm text-mute">
-          Real shop:{' '}
-          <a
-            className="text-cyan underline"
-            href="https://www.inkcrediblepens.org"
-            target="_blank"
-            rel="noreferrer"
-          >
-            inkcrediblepens.org
-          </a>
-        </p>
         <Link to="/" className="btn-primary mt-1">
           Back to shop
         </Link>
@@ -723,8 +712,8 @@ export default function Checkout() {
           </div>
           <p className="text-[11px] text-mute">
             {freeShip
-              ? `Free shipping on orders $${FREE_SHIPPING_THRESHOLD}+`
-              : `Flat $8 shipping · free at $${FREE_SHIPPING_THRESHOLD}+`}
+              ? `Free shipping on orders over $${FREE_SHIPPING_THRESHOLD}`
+              : `Flat $8 shipping · free over $${FREE_SHIPPING_THRESHOLD}`}
           </p>
           <div className="flex items-center justify-between border-t border-line pt-3">
             <span className="font-display text-lg">Total</span>

@@ -64,9 +64,9 @@ export function resolveReturnOrigin(bodyOrigin, fallback = 'http://127.0.0.1:517
   if (production) {
     if (envOrigin) return envOrigin
     console.error(
-      '[security] production hardening on but ORIGIN missing — using https://inkcrediblepens.org',
+      '[security] production hardening on but ORIGIN missing — using https://inkcredible.kennedyshome.com',
     )
-    return 'https://inkcrediblepens.org'
+    return 'https://inkcredible.kennedyshome.com'
   }
 
   if (envOrigin) return envOrigin

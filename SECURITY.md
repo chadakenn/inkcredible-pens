@@ -37,7 +37,7 @@ Production hardening is on when any of:
 
 - `NODE_ENV=production`
 - `REQUIRE_STRIPE_WEBHOOK=1`
-- `ORIGIN` looks like production HTTPS (e.g. contains `inkcrediblepens.org`, or any non-localhost `https://…`)
+- `ORIGIN` is any non-localhost production `https://…` URL
 
 In that mode **`STRIPE_WEBHOOK_SECRET` is required**. Missing secret → webhook returns **503** and the body is **not** parsed unsigned.
 
@@ -45,7 +45,7 @@ Local/dev (no production signals): unsigned parse is allowed for convenience whe
 
 ## Checkout return URLs (`returnOrigin`)
 
-Under production hardening (or when `ORIGIN` is a non-localhost HTTPS URL), Stripe success/cancel URLs **always** use configured `ORIGIN` (Chad’s prod target: `https://inkcrediblepens.org`). Client-supplied `returnOrigin` is ignored.
+Under production hardening (or when `ORIGIN` is a non-localhost HTTPS URL), Stripe success/cancel URLs **always** use configured `ORIGIN` (production: `https://inkcredible.kennedyshome.com`). Client-supplied `returnOrigin` is ignored.
 
 In local/dev: prefer env `ORIGIN` when set; otherwise localhost (or tunnel) origins from the client are accepted.
 

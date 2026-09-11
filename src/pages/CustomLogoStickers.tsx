@@ -76,7 +76,7 @@ export default function CustomLogoStickers() {
 
   const clampQty = (n: number) => Math.max(1, Math.min(10_000, Math.floor(n) || 1))
 
-  const readFile = async (file: File) => {
+  const readFile = useCallback(async (file: File) => {
     const validation = validateCustomArtworkFile(file)
     if (validation) {
       setError(validation)
@@ -126,7 +126,7 @@ export default function CustomLogoStickers() {
     } finally {
       setUploading(false)
     }
-  }
+  }, [previewUrl])
 
   const onInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -139,7 +139,7 @@ export default function CustomLogoStickers() {
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
     if (file) void readFile(file)
-  }, [])
+  }, [readFile])
 
   const clearLogo = () => {
     if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)

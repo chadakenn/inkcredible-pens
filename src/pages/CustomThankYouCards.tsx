@@ -51,7 +51,7 @@ export default function CustomThankYouCards() {
   const total = useMemo(() => thankYouCardPackPrice(packQty), [packQty])
   const metaLine = formatThankYouCardsCartMeta(packQty)
 
-  const readFile = async (file: File) => {
+  const readFile = useCallback(async (file: File) => {
     const validation = validateCustomArtworkFile(file)
     if (validation) {
       setError(validation)
@@ -102,7 +102,7 @@ export default function CustomThankYouCards() {
     } finally {
       setUploading(false)
     }
-  }
+  }, [previewUrl])
 
   const onInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -115,7 +115,7 @@ export default function CustomThankYouCards() {
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
     if (file) void readFile(file)
-  }, [])
+  }, [readFile])
 
   const clearArt = () => {
     setPreviewUrl(null)

@@ -13,7 +13,9 @@
     "test:product-upload-retention": "node scripts/test-product-upload-retention.mjs",
     "test:social-upload": "node scripts/test-social-upload.mjs",
     "test:catalog-management": "node scripts/test-catalog-management.mjs",
-    "test:secure-json-permissions": "node scripts/test-secure-json-permissions.mjs"
+    "test:secure-json-permissions": "node scripts/test-secure-json-permissions.mjs",
+    "test:shipping": "node scripts/test-shipping.mjs",
+    "test:admin-auth": "node scripts/test-admin-auth.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

@@ -15,7 +15,7 @@ export const FREE_SHIPPING_THRESHOLD_CENTS = 6000
 
 export function shippingCentsForSubtotal(subtotalCents) {
   const cents = Math.max(0, Math.round(Number(subtotalCents) || 0))
-  return cents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
+  return cents > FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
 }
 
 function roundMoney(n) {

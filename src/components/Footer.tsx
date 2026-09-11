@@ -38,14 +38,6 @@ export default function Footer() {
           <Link to="/custom" className="block text-mute transition hover:text-cyan">Custom studio</Link>
           <Link to="/shop" className="block text-mute transition hover:text-cyan">All categories</Link>
           <Link to="/search" className="block text-mute transition hover:text-cyan">Search</Link>
-          <a
-            href="https://www.inkcrediblepens.org"
-            target="_blank"
-            rel="noreferrer"
-            className="block text-mute transition hover:text-cyan"
-          >
-            Live Square site
-          </a>
         </div>
 
         <div className="space-y-3 text-sm">

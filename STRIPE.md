@@ -36,7 +36,7 @@ npm run stripe:server
 
 ### Fail-closed in production
 
-If `NODE_ENV=production`, `REQUIRE_STRIPE_WEBHOOK=1`, or `ORIGIN` is production HTTPS (e.g. `https://inkcrediblepens.org`), a missing `STRIPE_WEBHOOK_SECRET` makes `POST /api/stripe/webhook` return **503** — unsigned bodies are never accepted.
+If `NODE_ENV=production`, `REQUIRE_STRIPE_WEBHOOK=1`, or `ORIGIN` is production HTTPS (e.g. `https://inkcredible.kennedyshome.com`), a missing `STRIPE_WEBHOOK_SECRET` makes `POST /api/stripe/webhook` return **503** — unsigned bodies are never accepted.
 
 Local/dev without a secret: unsigned parse may still work for convenience (loud warning). Prefer `stripe listen` + secret, or set `ALLOW_INSECURE_WEBHOOK=1` to make the intent explicit. That flag does **not** unlock unsigned parse under production hardening.
 
@@ -44,7 +44,7 @@ If the webhook is delayed, `GET /api/checkout/session/:id` may confirm `payment_
 
 ### Return URLs
 
-Set `ORIGIN=https://inkcrediblepens.org` in production. Client `returnOrigin` is ignored in that mode (open-redirect hardening).
+Set `ORIGIN=https://inkcredible.kennedyshome.com` in production. Client `returnOrigin` is ignored in that mode (open-redirect hardening).
 
 ## Test card
 

@@ -72,10 +72,10 @@ sudo -u inkcredible npm run build
 ```bash
 STRIPE_SECRET_KEY=sk_live_...   # or sk_test_ until ready
 STRIPE_WEBHOOK_SECRET=whsec_... # REQUIRED — missing secret → webhook 503 in production
-ORIGIN=https://inkcrediblepens.org
+ORIGIN=https://inkcredible.kennedyshome.com
 NODE_ENV=production
 PORT=4242
-TRUST_PROXY=1                   # CF Tunnel or Caddy → Node; use 2 if CF → Caddy → Node
+TRUST_PROXY=2                   # Inkcredible uses Cloudflare → Caddy → Node
 ADMIN_PIN=....                  # REQUIRED strong PIN — NOT 1234 (boot refuses default)
 # ADMIN_SESSION_SECRET=...      # optional; auto-generated under data/admin/ if omitted
 # UPLOAD_RETENTION_DAYS=7
@@ -162,7 +162,7 @@ ss -ltnp | grep 4242
 
 Production config lives at [`deploy/Caddyfile`](./deploy/Caddyfile):
 
-- `https://inkcrediblepens.org/` → static SPA from `/opt/inkcredible-pens/dist` (fallback to `index.html`)
+- `https://inkcredible.kennedyshome.com/` → static SPA from `/opt/inkcredible-pens/dist` (fallback to `index.html`)
 - `www.` → permanent redirect to apex
 - `/api/*` → `reverse_proxy` → `127.0.0.1:4242`
 - `/uploads/*` → `reverse_proxy` → `127.0.0.1:4242` (keeps custom-art admin auth on Node; do not file_server uploads)
@@ -182,9 +182,9 @@ systemctl enable --now caddy
 systemctl reload caddy
 ```
 
-Forward the real client IP (Caddy does this by default with `reverse_proxy`). Set `TRUST_PROXY=1` on Node.
+Forward the real client IP (Caddy does this by default with `reverse_proxy`). Inkcredible's Cloudflare → Caddy → Node path uses `TRUST_PROXY=2`.
 
-**Option 2 — Cloudflare Tunnel** from the LXC to Cloudflare (no open ports on your router). Point the tunnel public hostname to `http://127.0.0.1:80` (Caddy) or directly to `http://127.0.0.1:4242` if you terminate TLS at Cloudflare and proxy API+static appropriately. With Tunnel → Node, keep `TRUST_PROXY=1`.
+**Option 2 — Cloudflare Tunnel** from the LXC to Cloudflare (no open ports on your router). Point the tunnel public hostname to `http://127.0.0.1:80` (Caddy) or directly to `http://127.0.0.1:4242` if you terminate TLS at Cloudflare and proxy API+static appropriately. Use `TRUST_PROXY=2` for Cloudflare → Caddy → Node, or `1` for Tunnel → Node directly.
 
 SPA note: the shipped Caddyfile uses `try_files` so unknown paths fall back to `index.html` (React Router).
 
@@ -199,7 +199,7 @@ SPA note: the shipped Caddyfile uses `try_files` so unknown paths fall back to `
 
 ```bash
 ORIGIN=https://YOUR_DOMAIN
-TRUST_PROXY=1   # or 2 if Cloudflare orange-cloud → Caddy → Node
+TRUST_PROXY=2   # Cloudflare orange-cloud → Caddy → Node
 ```
 
 and restart `inkcredible` so Stripe success/cancel URLs use the real host and rate limits key on real client IPs (not `127.0.0.1`).

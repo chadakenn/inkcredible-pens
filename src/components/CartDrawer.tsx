@@ -87,7 +87,7 @@ export default function CartDrawer() {
             />
           </div>
           <p className="mt-1.5 text-[11px] text-mute">
-            Flat $8 shipping · free at ${FREE_SHIPPING_THRESHOLD.toFixed(0)}+
+            Flat $8 shipping · free over ${FREE_SHIPPING_THRESHOLD.toFixed(0)}
           </p>
         </div>
 
