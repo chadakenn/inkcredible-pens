@@ -15,6 +15,7 @@ import {
   Search,
   X,
   KeyRound,
+  LayoutDashboard,
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
@@ -38,6 +39,7 @@ import {
 import { useScents } from '../store/scents'
 import LogoMark from '../components/LogoMark'
 import OrdersPanel from '../components/admin/OrdersPanel'
+import ManagerDashboard from '../components/admin/ManagerDashboard'
 import ProductPhotoField from '../components/admin/ProductPhotoField'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -148,7 +150,7 @@ function CanvasPriceEditor({
   )
 }
 
-type AdminTab = 'products' | 'scents' | 'orders'
+type AdminTab = 'dashboard' | 'products' | 'scents' | 'orders'
 
 interface ProductEditForm {
   id: string
@@ -171,14 +173,15 @@ function isQuotaError(error: unknown): boolean {
 }
 
 const TABS: { id: AdminTab; label: string; icon: typeof Package }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'products', label: 'Products', icon: Package },
   { id: 'scents', label: 'Scents', icon: Droplets },
   { id: 'orders', label: 'Orders', icon: ClipboardList },
 ]
 
 function parseTab(raw: string | null): AdminTab {
-  if (raw === 'scents' || raw === 'orders' || raw === 'products') return raw
-  return 'products'
+  if (raw === 'dashboard' || raw === 'scents' || raw === 'orders' || raw === 'products') return raw
+  return 'dashboard'
 }
 
 type ProductTypeFilter = 'All' | Category
@@ -330,6 +333,13 @@ export default function Admin() {
     if (next === 'products' && productType !== 'All') {
       nextParams.set('type', productType)
     }
+    setSearchParams(nextParams, { replace: true })
+  }
+
+  const openOrder = (id: string) => {
+    const nextParams = new URLSearchParams()
+    nextParams.set('tab', 'orders')
+    nextParams.set('order', id)
     setSearchParams(nextParams, { replace: true })
   }
 
@@ -671,7 +681,7 @@ export default function Admin() {
 
       <nav
         aria-label="Store manager sections"
-        className="mt-6 grid grid-cols-3 gap-2 rounded-2xl border border-line bg-ink-2 p-1.5"
+        className="mt-6 grid grid-cols-2 gap-2 rounded-2xl border border-line bg-ink-2 p-1.5 sm:grid-cols-4"
       >
         {TABS.map(({ id, label, icon: Icon }) => {
           const on = tab === id
@@ -693,6 +703,8 @@ export default function Admin() {
           )
         })}
       </nav>
+
+      {tab === 'dashboard' && <div className="mt-8"><ManagerDashboard onOpenOrders={() => setTab('orders')} onOpenOrder={openOrder} /></div>}
 
       {tab === 'products' && (
         <div className="mt-8">

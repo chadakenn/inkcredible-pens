@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Archive, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, Printer, RefreshCw, RotateCcw, Search, Trash2, Truck } from 'lucide-react'
 import { formatBannerCartMeta } from '../../data/banners'
 import { formatBusinessCardsCartMeta } from '../../data/businessCards'
@@ -617,6 +617,8 @@ function OrderCard({
 }
 
 export default function OrdersPanel() {
+  const [searchParams] = useSearchParams()
+  const requestedOrder = searchParams.get('order')
   const orders = useOrders((s) => s.orders)
   const syncState = useOrders((s) => s.syncState)
   const syncError = useOrders((s) => s.syncError)
@@ -676,6 +678,14 @@ export default function OrdersPanel() {
   useEffect(() => {
     void hydrateFromApi()
   }, [hydrateFromApi])
+
+  useEffect(() => {
+    if (!requestedOrder) return
+    const requested = orders.find((order) => order.id === requestedOrder)
+    if (!requested) return
+    setView(requested.archivedAt ? 'archive' : 'active')
+    setExpandedId(requested.id)
+  }, [orders, requestedOrder])
 
   return (
     <div>
