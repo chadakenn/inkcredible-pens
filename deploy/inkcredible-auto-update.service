@@ -1,0 +1,16 @@
+[Unit]
+Description=Automatically deploy Inkcredible Pens from GitHub
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/inkcredible-pens
+Environment=INKCREDIBLE_ROOT=/opt/inkcredible-pens
+Environment=INKCREDIBLE_USER=inkcredible
+Environment=INKCREDIBLE_BRANCH=main
+ExecStart=/opt/inkcredible-pens/scripts/auto-update.sh
+Nice=10
+IOSchedulingClass=idle
+

@@ -225,6 +225,42 @@ and restart `inkcredible` so Stripe success/cancel URLs use the real host and ra
 
 ## D. Every update (after I make changes)
 
+### Automatic updates (recommended)
+
+Install the included systemd timer once. It checks GitHub `main` every five minutes,
+preflight-builds each update in a temporary worktree, and only then advances and
+restarts the live app. It refuses non-fast-forward updates and refuses to overwrite
+locally edited tracked files.
+
+```bash
+cd /opt/inkcredible-pens
+chmod 755 scripts/auto-update.sh
+cp deploy/inkcredible-auto-update.service /etc/systemd/system/
+cp deploy/inkcredible-auto-update.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now inkcredible-auto-update.timer
+systemctl list-timers inkcredible-auto-update.timer --no-pager
+```
+
+Test it immediately and view its log:
+
+```bash
+systemctl start inkcredible-auto-update.service
+journalctl -u inkcredible-auto-update.service -n 100 --no-pager
+```
+
+After that, merging or pushing a new commit to GitHub `main` is enough. The LXC
+normally installs it within about five minutes. Persistent `.env`, `data/`,
+`uploads/`, and the configured customer artwork mount are not replaced.
+
+Pause or remove automatic deployment with:
+
+```bash
+systemctl disable --now inkcredible-auto-update.timer
+```
+
+### Manual updates
+
 From the guest:
 
 ```bash
