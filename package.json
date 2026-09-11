@@ -17,7 +17,8 @@
     "test:shipping": "node scripts/test-shipping.mjs",
     "test:admin-auth": "node scripts/test-admin-auth.mjs",
     "test:order-archive": "node scripts/test-order-archive.mjs",
-    "test:sales-summary": "node --experimental-strip-types scripts/test-sales-summary.ts"
+    "test:sales-summary": "node --experimental-strip-types scripts/test-sales-summary.ts",
+    "test:packing-slip": "node --experimental-strip-types scripts/test-packing-slip.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

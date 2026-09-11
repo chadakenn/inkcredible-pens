@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Archive, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, RefreshCw, RotateCcw, Search, Trash2, Truck } from 'lucide-react'
+import { Archive, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, Printer, RefreshCw, RotateCcw, Search, Trash2, Truck } from 'lucide-react'
 import { formatBannerCartMeta } from '../../data/banners'
 import { formatBusinessCardsCartMeta } from '../../data/businessCards'
 import { formatThankYouCardsCartMeta } from '../../data/thankYouCards'
@@ -9,6 +9,7 @@ import { formatLogoCartMeta } from '../../data/logoStickers'
 import type { CustomLogoMeta } from '../../data/products'
 import { customPreviewSrc, downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 import { paidSalesSummary } from '../../lib/salesSummary'
+import { buildPackingSlipHtml } from '../../lib/packingSlip'
 import {
   ORDER_STATUS_LABEL,
   TRACKING_STATUS_LABEL,
@@ -174,6 +175,19 @@ function OrderCard({
   const [trackingRefreshing, setTrackingRefreshing] = useState(false)
   const [trackingMsg, setTrackingMsg] = useState<string | null>(null)
   const [archiveBusy, setArchiveBusy] = useState(false)
+
+  const printPackingSlip = () => {
+    const popup = window.open('', '_blank', 'width=900,height=760')
+    if (!popup) {
+      window.alert('Your browser blocked the packing slip window. Allow pop-ups for this site and try again.')
+      return
+    }
+    popup.opener = null
+    popup.document.open()
+    popup.document.write(buildPackingSlipHtml(order, itemMetaLine))
+    popup.document.close()
+    popup.focus()
+  }
 
   useEffect(() => {
     setCarrier(order.trackingCarrier || 'USPS')
@@ -546,21 +560,26 @@ function OrderCard({
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={archiveBusy}
-            onClick={() => {
-              setArchiveBusy(true)
-              setTrackingMsg(null)
-              void setArchived(order.id, !archived)
-                .catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not update archive'))
-                .finally(() => setArchiveBusy(false))
-            }}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-lime px-4 text-base font-extrabold text-ink disabled:opacity-50 sm:w-auto"
-          >
-            {archived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-            {archived ? 'Restore to active orders' : 'Complete & archive'}
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button type="button" onClick={printPackingSlip} className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-cyan/40 bg-cyan/10 px-4 text-base font-extrabold text-cyan sm:w-auto">
+              <Printer className="h-4 w-4" /> Print packing slip
+            </button>
+            <button
+              type="button"
+              disabled={archiveBusy}
+              onClick={() => {
+                setArchiveBusy(true)
+                setTrackingMsg(null)
+                void setArchived(order.id, !archived)
+                  .catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not update archive'))
+                  .finally(() => setArchiveBusy(false))
+              }}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-lime px-4 text-base font-extrabold text-ink disabled:opacity-50 sm:w-auto"
+            >
+              {archived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+              {archived ? 'Restore to active orders' : 'Complete & archive'}
+            </button>
+          </div>
 
           {confirmDelete ? (
             <div className="rounded-2xl border border-pink/40 bg-ink p-4">
