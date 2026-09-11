@@ -15,6 +15,7 @@ import { mountTracking, startTrackingPoll } from './tracking.mjs'
 import { mountCatalog, readProducts, writeProducts } from './catalog.mjs'
 import { mountScents } from './scents.mjs'
 import { mountListingsMcp } from './listings-mcp.mjs'
+import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { priceCart } from './pricing.mjs'
 import {
@@ -172,6 +173,7 @@ mountTracking(app)
 mountCatalog(app)
 mountScents(app)
 mountListingsMcp(app)
+mountQuotes(app, { createPaymentSession: createQuotePaymentSession })
 
 app.get('/api/health', (_req, res) => {
   res.json({
@@ -390,13 +392,15 @@ function fulfillCheckoutSession(session) {
   }
 
   const lines = Array.isArray(pending.lines) ? pending.lines : []
-  const items = lines.map((line) => ({
-    name: line.name,
-    price: (line.unitAmountCents || 0) / 100,
-    qty: line.quantity || 1,
-    custom: line.custom,
-    productId: line.productId,
-  }))
+  const items = Array.isArray(pending.orderItems) && pending.orderItems.length
+    ? pending.orderItems
+    : lines.map((line) => ({
+        name: line.name,
+        price: (line.unitAmountCents || 0) / 100,
+        qty: line.quantity || 1,
+        custom: line.custom,
+        productId: line.productId,
+      }))
 
   const total =
     pending.totalCents != null
@@ -425,7 +429,43 @@ function fulfillCheckoutSession(session) {
     orderId: order.id,
     stripeSessionId: sessionId,
   })
+  if (pending.quoteId) markQuotePaid(pending.quoteId, order.id)
   return order
+}
+
+async function createQuotePaymentSession(quote, finalPriceCents) {
+  if (!secret) throw new Error('missing_stripe_key')
+  const shippingCents = quoteShippingCents(finalPriceCents)
+  const checkoutId = newCheckoutId()
+  const quantity = quote.items.reduce((sum, item) => sum + Math.max(1, Number(item.qty) || 1), 0)
+  const estimatedTotal = quote.items.reduce((sum, item) => sum + Math.max(0, Number(item.estimate) || 0) * Math.max(1, Number(item.qty) || 1), 0)
+  const summary = quote.items.map((item) => `${item.name} x${item.qty}`).join('; ').slice(0, 500)
+  const orderItems = quote.items.map((item) => ({
+    name: item.name,
+    qty: item.qty,
+    price: estimatedTotal > 0
+      ? (finalPriceCents / 100) * Math.max(0, Number(item.estimate) || 0) / estimatedTotal
+      : (finalPriceCents / 100) / quantity,
+    custom: item.custom,
+  }))
+  savePendingCheckout({
+    id: checkoutId, status: 'pending', quoteId: quote.id, customer: quote.customer,
+    lines: [{ productId: quote.id, name: `Custom quote ${quote.displayCode}`, description: summary, quantity: 1, unitAmountCents: finalPriceCents, custom: { quoteId: quote.id } }],
+    orderItems, subtotalCents: finalPriceCents, shippingCents, totalCents: finalPriceCents + shippingCents,
+  })
+  const stripe = new Stripe(secret)
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment', customer_email: quote.customer.email, client_reference_id: checkoutId,
+    line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: finalPriceCents, product_data: { name: `Inkcredible custom project ${quote.displayCode}`, description: summary } } }],
+    shipping_address_collection: { allowed_countries: ['US'] },
+    shipping_options: [{ shipping_rate_data: { type: 'fixed_amount', fixed_amount: { amount: shippingCents, currency: 'usd' }, display_name: shippingCents === 0 ? 'Free shipping' : 'Standard shipping' } }],
+    success_url: `${DEFAULT_ORIGIN}/checkout?success=1&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${DEFAULT_ORIGIN}/checkout?canceled=1`,
+    metadata: { checkoutId, quoteId: quote.id, shippingCents: String(shippingCents), subtotalCents: String(finalPriceCents), quotedItems: String(quantity) },
+  })
+  if (!session.url) throw new Error('no_checkout_url')
+  attachStripeSession(checkoutId, session.id)
+  return { url: session.url, sessionId: session.id, shippingCents }
 }
 
 const checkoutCreateLimiter = createRateLimiter({
@@ -452,6 +492,9 @@ app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res)
 
   if (!email || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'invalid_body' })
+  }
+  if (items.some((item) => item?.config?.estimateOnly === true)) {
+    return res.status(400).json({ error: 'quote_required', message: 'Estimate-only items must use the no-payment quote workflow.' })
   }
 
   try {

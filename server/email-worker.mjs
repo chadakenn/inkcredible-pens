@@ -5,6 +5,7 @@ import { readJsonFile, writeJsonAtomic } from './security.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ORDERS_FILE = path.resolve(__dirname, '../data/orders/orders.json')
+const QUOTES_FILE = path.resolve(__dirname, '../data/quotes/quotes.json')
 const EMAIL_DIR = path.resolve(__dirname, '../data/email')
 const STATE_FILE = path.join(EMAIL_DIR, 'email-state.json')
 
@@ -55,6 +56,11 @@ function readOrders() {
   if (Array.isArray(data)) return data
   if (data && Array.isArray(data.orders)) return data.orders
   throw new Error('unexpected_orders_shape')
+}
+
+function readQuotes() {
+  const data = readJsonFile(QUOTES_FILE)
+  return Array.isArray(data) ? data : []
 }
 
 function readState() {
@@ -215,6 +221,36 @@ function shipmentMessage(order) {
   }
 }
 
+function quoteReceivedMessage(quote) {
+  const code = clean(quote.displayCode || quote.id, 40)
+  const firstName = clean(quote.customer?.name, 80).split(' ')[0]
+  return {
+    subject: `We received your Inkcredible quote request • ${code}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,sans-serif"><div style="max-width:680px;margin:auto;padding:32px 18px"><div style="border-top:4px solid #26d9ff;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#ff3ea5;font-weight:700">INKCREDIBLE PENS</div><h1>Quote request received</h1><p>${firstName ? `Hey ${esc(firstName)}, we` : 'We'} received your custom project request. Nothing has been charged.</p><p><strong>Quote:</strong> ${esc(code)}</p><p style="color:#aaaab3">We’ll review your artwork and details, then email the final price and a secure Stripe checkout button.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\nQuote request received: ${code}\n\nNothing has been charged. We’ll review your artwork and details, then email the final price and a secure Stripe checkout link.`,
+  }
+}
+
+function quoteOwnerMessage(quote) {
+  const code = clean(quote.displayCode || quote.id, 40)
+  return {
+    subject: `New quote request • ${code} • ${clean(quote.customer?.name, 80)}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,sans-serif"><div style="max-width:680px;margin:auto;padding:32px 18px"><div style="border-top:4px solid #c9ff37;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700">INKCREDIBLE PENS</div><h1>New quote request</h1><p><strong>${esc(code)}</strong><br>${esc(clean(quote.customer?.name))}<br>${esc(clean(quote.customer?.email))}</p><p>Estimate shown: ${money(quote.estimateTotal)}</p>${STORE_ORIGIN ? `<p><a href="${esc(`${STORE_ORIGIN}/admin?tab=quotes`)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:999px">Review quote</a></p>` : ''}</div></div></body></html>`,
+    text: `NEW QUOTE REQUEST\n\n${code}\n${clean(quote.customer?.name)}\n${clean(quote.customer?.email)}\nEstimate shown: ${money(quote.estimateTotal)}${STORE_ORIGIN ? `\n\nReview: ${STORE_ORIGIN}/admin?tab=quotes` : ''}`,
+  }
+}
+
+function quotePaymentMessage(quote) {
+  const code = clean(quote.displayCode || quote.id, 40)
+  const price = Number(quote.finalPriceCents || 0) / 100
+  const shipping = Number(quote.shippingCents || 0) / 100
+  return {
+    subject: `Your Inkcredible custom quote is ready • ${code}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,sans-serif"><div style="max-width:680px;margin:auto;padding:32px 18px"><div style="border-top:4px solid #c9ff37;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700">INKCREDIBLE PENS</div><h1>Your quote is ready</h1><p><strong>${esc(code)}</strong></p><p>Final project price: <strong style="color:#c9ff37">${money(price)}</strong><br>Shipping: ${shipping ? money(shipping) : 'FREE'}</p><p><a href="${esc(quote.paymentUrl)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:14px 20px;border-radius:999px">Review & pay securely</a></p><p style="color:#aaaab3">You’ll confirm your shipping address on Stripe’s secure checkout page.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\nYour quote ${code} is ready.\nFinal project price: ${money(price)}\nShipping: ${shipping ? money(shipping) : 'FREE'}\n\nReview and pay securely: ${quote.paymentUrl}`,
+  }
+}
+
 async function sendEmail({ to, subject, html, text, idempotencyKey }) {
   const payload = { from: FROM_EMAIL, to: [to], subject: clean(subject, 240), html, text }
   if (REPLY_TO) payload.reply_to = REPLY_TO
@@ -351,6 +387,16 @@ async function runOnce() {
       await attempt(state, order, 'customer', String(order.customer?.email || '').trim(), customerMessage)
       if (order.status === 'shipped' && order.trackingNumber) {
         await attempt(state, order, 'shipment', String(order.customer?.email || '').trim(), shipmentMessage)
+      }
+    }
+
+    for (const quote of [...readQuotes()].reverse()) {
+      if (quote.status === 'requested') {
+        for (const [index, email] of OWNER_EMAILS.entries()) await attempt(state, quote, `quote_owner_${index + 1}`, email, quoteOwnerMessage)
+        await attempt(state, quote, 'quote_received', String(quote.customer?.email || '').trim(), quoteReceivedMessage)
+      }
+      if (quote.status === 'payment_sent' && quote.paymentUrl) {
+        await attempt(state, quote, 'quote_payment', String(quote.customer?.email || '').trim(), quotePaymentMessage)
       }
     }
   } catch (err) {

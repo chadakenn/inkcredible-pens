@@ -145,7 +145,7 @@ export default function CartDrawer() {
                         )}
                         {product.custom?.estimateOnly && (
                           <p className="mt-0.5 text-[11px] font-bold text-lavender">
-                            Estimate — final quote by email
+                            Quote request — nothing charged today
                           </p>
                         )}
                         {product.custom?.freshieScent && (

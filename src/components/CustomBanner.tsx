@@ -17,7 +17,7 @@ const doors = [
   {
     to: '/custom/banners',
     title: 'Banners',
-    blurb: 'Size presets from $80 — add a transparent estimate to cart.',
+    blurb: 'Size presets from $80 — request a free quote with no payment today.',
     accent: 'from-cyan to-lime',
     chip: 'text-cyan',
     btn: 'bg-cyan text-ink',

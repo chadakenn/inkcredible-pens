@@ -1,4 +1,4 @@
-/** Banner size presets + estimate pricing (add estimate to cart; final art by email) */
+/** Banner size presets + estimate pricing (submitted as a no-payment quote request) */
 
 export const CUSTOM_BANNERS_PRODUCT_ID = 'MLJTHKL7NSRUCPUAIBOFAFV3'
 

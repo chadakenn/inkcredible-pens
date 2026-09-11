@@ -84,7 +84,7 @@ const studioCards = [
   {
     to: '/custom/banners',
     title: 'Banners',
-    blurb: 'Size presets from $80 — add estimate to cart.',
+    blurb: 'Size presets from $80 — request a free quote.',
     label: 'Configurator',
     labelClass: 'text-cyan',
     border: 'border-cyan/40 hover:border-cyan/70',

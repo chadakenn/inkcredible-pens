@@ -310,6 +310,7 @@ function referencedArtworkIds() {
   const dirs = [
     CHECKOUTS_DIR,
     path.resolve(__dirname, '../data/orders'),
+    path.resolve(__dirname, '../data/quotes'),
   ]
   for (const dir of dirs) {
     if (!existsSync(dir)) continue

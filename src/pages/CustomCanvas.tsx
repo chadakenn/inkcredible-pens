@@ -400,7 +400,7 @@ export default function CustomCanvas() {
               className="btn-primary min-h-12 w-full text-base disabled:opacity-60"
             >
               <ShoppingBag className="h-5 w-5" />{' '}
-              {uploading ? 'Uploading…' : `Add to cart — ~$${estimate.toFixed(2)}`}
+              {uploading ? 'Uploading…' : `Request quote — est. ~$${estimate.toFixed(2)}`}
             </button>
 
             <p className="text-center text-xs text-mute">

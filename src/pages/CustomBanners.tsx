@@ -210,14 +210,14 @@ export default function CustomBanners() {
               <GraphicsLogo size="xl" />
             </div>
             <p className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-cyan">
-              <Sparkles className="h-3.5 w-3.5" /> Configurator · add estimate to cart
+              <Sparkles className="h-3.5 w-3.5" /> Configurator · request a free quote
             </p>
             <h1 className="font-display text-3xl leading-tight sm:text-4xl">
               Custom Banners
             </h1>
             <p className="mt-2 max-w-xl text-sm text-mute sm:text-base">
-              Powered by Inkcredible Graphics. Pick a size, upload art, and add a transparent estimate to your cart.
-              We&apos;ll confirm final art by email before production.
+              Powered by Inkcredible Graphics. Pick a size, upload art, and request a quote with no payment today.
+              We&apos;ll email the final price and secure checkout link.
             </p>
           </div>
           <p className="font-display text-2xl text-lime sm:text-3xl">
@@ -410,7 +410,7 @@ export default function CustomBanners() {
 
             <div className="rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3">
               <p className="text-[11px] font-extrabold uppercase tracking-wider text-lime">
-                Estimate — add to cart
+                Estimated price — no payment today
               </p>
               <p className="mt-1 font-display text-xl text-lime">~${estimate.toFixed(2)}</p>
               <p className="mt-1 text-xs text-mute">
@@ -432,7 +432,7 @@ export default function CustomBanners() {
               <ShoppingBag className="h-5 w-5" />{' '}
               {uploading
                 ? 'Uploading…'
-                : `Add estimate to cart — ~$${estimate.toFixed(2)}`}
+                : `Request quote — est. ~$${estimate.toFixed(2)}`}
             </button>
 
             <p className="text-center text-xs text-mute">
