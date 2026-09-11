@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Download, Trash2, RefreshCw, Truck, ExternalLink } from 'lucide-react'
+import { Archive, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, RefreshCw, RotateCcw, Search, Trash2, Truck } from 'lucide-react'
 import { formatBannerCartMeta } from '../../data/banners'
 import { formatBusinessCardsCartMeta } from '../../data/businessCards'
 import { formatThankYouCardsCartMeta } from '../../data/thankYouCards'
@@ -153,22 +153,26 @@ function OrderCard({
   order,
   expanded,
   onToggle,
+  archived,
 }: {
   order: Order
   expanded: boolean
   onToggle: () => void
+  archived: boolean
 }) {
   const setStatus = useOrders((s) => s.setStatus)
   const setTracking = useOrders((s) => s.setTracking)
   const markShipped = useOrders((s) => s.markShipped)
   const refreshTracking = useOrders((s) => s.refreshTracking)
   const removeOrder = useOrders((s) => s.removeOrder)
+  const setArchived = useOrders((s) => s.setArchived)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [carrier, setCarrier] = useState(order.trackingCarrier || 'USPS')
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '')
   const [trackingSaving, setTrackingSaving] = useState(false)
   const [trackingRefreshing, setTrackingRefreshing] = useState(false)
   const [trackingMsg, setTrackingMsg] = useState<string | null>(null)
+  const [archiveBusy, setArchiveBusy] = useState(false)
 
   useEffect(() => {
     setCarrier(order.trackingCarrier || 'USPS')
@@ -541,6 +545,22 @@ function OrderCard({
             </div>
           </div>
 
+          <button
+            type="button"
+            disabled={archiveBusy}
+            onClick={() => {
+              setArchiveBusy(true)
+              setTrackingMsg(null)
+              void setArchived(order.id, !archived)
+                .catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not update archive'))
+                .finally(() => setArchiveBusy(false))
+            }}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-lime px-4 text-base font-extrabold text-ink disabled:opacity-50 sm:w-auto"
+          >
+            {archived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+            {archived ? 'Restore to active orders' : 'Complete & archive'}
+          </button>
+
           {confirmDelete ? (
             <div className="rounded-2xl border border-pink/40 bg-ink p-4">
               <p className="font-bold text-cream">Delete this order? Can&apos;t undo.</p>
@@ -581,8 +601,56 @@ export default function OrdersPanel() {
   const syncState = useOrders((s) => s.syncState)
   const syncError = useOrders((s) => s.syncError)
   const hydrateFromApi = useOrders((s) => s.hydrateFromApi)
-  const sorted = useMemo(() => ordersNewestFirst(orders), [orders])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [view, setView] = useState<'active' | 'archive'>('active')
+  const [query, setQuery] = useState('')
+  const [month, setMonth] = useState('')
+
+  const activeCount = orders.filter((order) => !order.archivedAt).length
+  const archiveCount = orders.length - activeCount
+  const sorted = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return ordersNewestFirst(orders).filter((order) => {
+      if (view === 'archive' ? !order.archivedAt : Boolean(order.archivedAt)) return false
+      if (month && !String(order.createdAt).startsWith(month)) return false
+      if (!needle) return true
+      const haystack = [
+        order.id,
+        order.displayCode,
+        order.customer.name,
+        order.customer.email,
+        order.trackingNumber,
+        ...order.items.flatMap((item) => [item.name, JSON.stringify(item.custom || {})]),
+      ].join(' ').toLowerCase()
+      return haystack.includes(needle)
+    })
+  }, [orders, view, query, month])
+
+  const exportArchive = () => {
+    const rows = ordersNewestFirst(orders.filter((order) => order.archivedAt))
+    const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
+    const lines = [
+      ['Order', 'Ordered', 'Completed', 'Customer', 'Email', 'Items', 'Total', 'Carrier', 'Tracking'],
+      ...rows.map((order) => [
+        order.displayCode || order.id,
+        order.createdAt,
+        order.archivedAt || '',
+        order.customer.name,
+        order.customer.email,
+        order.items.map((item) => `${item.name} x${item.qty}`).join('; '),
+        order.total.toFixed(2),
+        order.trackingCarrier || '',
+        order.trackingNumber || '',
+      ]),
+    ]
+    const blob = new Blob([lines.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `inkcredible-completed-orders-${new Date().toISOString().slice(0, 10)}.csv`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
 
   useEffect(() => {
     void hydrateFromApi()
@@ -627,9 +695,27 @@ export default function OrdersPanel() {
         </p>
       )}
 
+      <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-line bg-ink p-1.5">
+        <button type="button" onClick={() => { setView('active'); setExpandedId(null) }} className={`min-h-12 rounded-xl text-sm font-extrabold ${view === 'active' ? 'bg-cyan text-ink' : 'text-mute'}`}>
+          Active orders ({activeCount})
+        </button>
+        <button type="button" onClick={() => { setView('archive'); setExpandedId(null) }} className={`min-h-12 rounded-xl text-sm font-extrabold ${view === 'archive' ? 'bg-lime text-ink' : 'text-mute'}`}>
+          Completed archive ({archiveCount})
+        </button>
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+        <label className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, order, item, or tracking…" className="min-h-12 w-full rounded-xl border border-line bg-ink pl-10 pr-3 text-sm text-cream outline-none focus:border-cyan" />
+        </label>
+        <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Filter orders by month" className="min-h-12 rounded-xl border border-line bg-ink px-3 text-sm text-cream outline-none focus:border-cyan" />
+        {view === 'archive' && <button type="button" onClick={exportArchive} disabled={archiveCount === 0} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-lime/40 bg-lime/10 px-4 text-sm font-extrabold text-lime disabled:opacity-40"><FileDown className="h-4 w-4" /> Export CSV</button>}
+      </div>
+
       {sorted.length === 0 ? (
         <div className="mt-6 rounded-3xl border border-dashed border-line bg-ink-2 px-6 py-16 text-center">
-          <p className="font-display text-2xl text-cream">No orders yet — place a test checkout.</p>
+          <p className="font-display text-2xl text-cream">{view === 'archive' ? 'No completed orders found.' : 'No active orders found.'}</p>
           <p className="mt-2 text-sm text-mute">
             Add something to the cart, go through checkout, then come back here.
           </p>
@@ -647,6 +733,7 @@ export default function OrdersPanel() {
               onToggle={() =>
                 setExpandedId((id) => (id === order.id ? null : order.id))
               }
+              archived={view === 'archive'}
             />
           ))}
         </ul>

@@ -78,6 +78,7 @@ export interface PatchOrderBody {
   trackingCarrier?: string | null
   trackingNumber?: string | null
   shippedAt?: string | null
+  archivedAt?: string | null
 }
 
 export async function patchOrder(

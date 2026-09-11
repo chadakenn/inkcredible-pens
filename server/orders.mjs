@@ -197,6 +197,19 @@ export function updateOrderById(id, mutator) {
   return orders[idx]
 }
 
+export function applyOrderArchive(order, archivedAt) {
+  const next = { ...order }
+  if (archivedAt == null || archivedAt === '') {
+    delete next.archivedAt
+    return next
+  }
+  if (typeof archivedAt !== 'string' || !Number.isFinite(Date.parse(archivedAt))) {
+    throw Object.assign(new Error('invalid_archivedAt'), { code: 'invalid_archivedAt' })
+  }
+  next.archivedAt = archivedAt
+  return next
+}
+
 /**
  * @param {import('express').Express} app
  */
@@ -238,8 +251,9 @@ export function mountOrders(app) {
     const hasCarrier = Object.prototype.hasOwnProperty.call(body, 'trackingCarrier')
     const hasNumber = Object.prototype.hasOwnProperty.call(body, 'trackingNumber')
     const hasShippedAt = Object.prototype.hasOwnProperty.call(body, 'shippedAt')
+    const hasArchivedAt = Object.prototype.hasOwnProperty.call(body, 'archivedAt')
 
-    if (!hasStatus && !hasCarrier && !hasNumber && !hasShippedAt) {
+    if (!hasStatus && !hasCarrier && !hasNumber && !hasShippedAt && !hasArchivedAt) {
       return res.status(400).json({ error: 'no_updates' })
     }
 
@@ -294,6 +308,15 @@ export function mountOrders(app) {
         next.shippedAt = body.shippedAt
       } else {
         return res.status(400).json({ error: 'invalid_shippedAt' })
+      }
+    }
+
+    if (hasArchivedAt) {
+      try {
+        Object.assign(next, applyOrderArchive(next, body.archivedAt))
+        if (body.archivedAt == null || body.archivedAt === '') delete next.archivedAt
+      } catch {
+        return res.status(400).json({ error: 'invalid_archivedAt' })
       }
     }
 

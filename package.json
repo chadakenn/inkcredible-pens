@@ -15,7 +15,8 @@
     "test:catalog-management": "node scripts/test-catalog-management.mjs",
     "test:secure-json-permissions": "node scripts/test-secure-json-permissions.mjs",
     "test:shipping": "node scripts/test-shipping.mjs",
-    "test:admin-auth": "node scripts/test-admin-auth.mjs"
+    "test:admin-auth": "node scripts/test-admin-auth.mjs",
+    "test:order-archive": "node scripts/test-order-archive.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

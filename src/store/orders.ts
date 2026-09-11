@@ -55,6 +55,7 @@ export interface Order {
   trackingDetail?: string
   trackingCheckedAt?: string
   deliveredAt?: string
+  archivedAt?: string
 }
 
 export interface OrderTrackingInput {
@@ -89,6 +90,7 @@ interface OrdersState {
   setStatus: (id: string, status: OrderStatus) => Promise<void>
   setTracking: (id: string, tracking: OrderTrackingInput) => Promise<void>
   markShipped: (id: string, tracking: OrderTrackingInput) => Promise<void>
+  setArchived: (id: string, archived: boolean) => Promise<void>
   refreshTracking: (id: string) => Promise<Order>
   patchLocalOrder: (order: Order) => void
   removeOrder: (id: string) => Promise<void>
@@ -290,6 +292,27 @@ export const useOrders = create<OrdersState>()(
           }))
         } catch (error) {
           set({ syncState: 'error', syncError: 'Could not mark the order shipped.' })
+          throw error
+        }
+      },
+
+      setArchived: async (id, archived) => {
+        try {
+          const updated = await apiPatchOrder(id, {
+            archivedAt: archived ? new Date().toISOString() : null,
+          })
+          set((s) => ({
+            orders: s.orders.map((o) => (o.id === id ? updated : o)),
+            syncState: 'synced',
+            syncError: null,
+          }))
+        } catch (error) {
+          set({
+            syncState: 'error',
+            syncError: archived
+              ? 'Could not archive order — nothing was changed'
+              : 'Could not restore order — nothing was changed',
+          })
           throw error
         }
       },
