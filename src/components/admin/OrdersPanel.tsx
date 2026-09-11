@@ -726,14 +726,27 @@ export default function OrdersPanel() {
         </button>
       </div>
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-        <label className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, order, item, or tracking…" className="min-h-12 w-full rounded-xl border border-line bg-ink pl-10 pr-3 text-sm text-cream outline-none focus:border-cyan" />
+      <div className="mt-3 grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+        <label>
+          <span className="mb-1 block text-xs font-extrabold uppercase tracking-wider text-mute">Search orders</span>
+          <span className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mute" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Customer, order, item, or tracking…" className="min-h-12 w-full rounded-xl border border-line bg-ink pl-10 pr-3 text-sm text-cream outline-none focus:border-cyan" />
+          </span>
         </label>
-        <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Filter orders by month" className="min-h-12 rounded-xl border border-line bg-ink px-3 text-sm text-cream outline-none focus:border-cyan" />
+        <label>
+          <span className="mb-1 block text-xs font-extrabold uppercase tracking-wider text-mute">Order month</span>
+          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="min-h-12 min-w-44 rounded-xl border border-line bg-ink px-3 text-sm text-cream [color-scheme:dark] outline-none focus:border-cyan" />
+        </label>
+        {(query || month) && (
+          <button type="button" onClick={() => { setQuery(''); setMonth('') }} className="min-h-12 rounded-xl border border-line bg-ink px-4 text-sm font-extrabold text-cream hover:border-cyan">
+            Clear filters
+          </button>
+        )}
         {view === 'archive' && <button type="button" onClick={exportArchive} disabled={archiveCount === 0} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-lime/40 bg-lime/10 px-4 text-sm font-extrabold text-lime disabled:opacity-40"><FileDown className="h-4 w-4" /> Export CSV</button>}
       </div>
+
+      {(query || month) && <p className="mt-2 text-sm text-mute">Showing {sorted.length} matching order{sorted.length === 1 ? '' : 's'}.</p>}
 
       {sorted.length === 0 ? (
         <div className="mt-6 rounded-3xl border border-dashed border-line bg-ink-2 px-6 py-16 text-center">
