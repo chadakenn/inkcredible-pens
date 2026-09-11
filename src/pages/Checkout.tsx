@@ -142,7 +142,7 @@ function OrderSuccessPanel({
 export default function Checkout() {
   useDocumentTitle('Checkout')
   const [searchParams, setSearchParams] = useSearchParams()
-  const { items, subtotal, clear } = useCart()
+  const { items, clear, removeItem } = useCart()
   const placeOrder = useOrders((s) => s.placeOrder)
   const [orderId, setOrderId] = useState<string | null>(null)
   const [quoteId, setQuoteId] = useState<string | null>(null)
@@ -161,12 +161,16 @@ export default function Checkout() {
   const [stripeReady, setStripeReady] = useState<boolean | null>(null)
   const [pendingConfirmation, setPendingConfirmation] = useState(false)
   const [pendingSessionLabel, setPendingSessionLabel] = useState<string | null>(null)
-  const total = subtotal()
-  const shippingEstimate = shippingDollarsForSubtotal(total)
-  const freeShip = isFreeShipping(total)
-  const grandTotal = total + shippingEstimate
-  const quoteOnly = items.length > 0 && items.every(({ product }) => product.custom?.estimateOnly === true)
-  const mixedQuoteCart = items.some(({ product }) => product.custom?.estimateOnly === true) && !quoteOnly
+  const quoteItems = items.filter(({ product }) => product.custom?.estimateOnly === true)
+  const regularItems = items.filter(({ product }) => product.custom?.estimateOnly !== true)
+  const hasQuoteItems = quoteItems.length > 0
+  const quoteOnly = hasQuoteItems && regularItems.length === 0
+  const mixedQuoteCart = hasQuoteItems && regularItems.length > 0
+  const quoteEstimate = quoteItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
+  const regularSubtotal = regularItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
+  const shippingEstimate = regularItems.length ? shippingDollarsForSubtotal(regularSubtotal) : 0
+  const freeShip = regularItems.length > 0 && isFreeShipping(regularSubtotal)
+  const grandTotal = regularSubtotal + shippingEstimate
 
   const successFlag = searchParams.get('success') === '1'
   const canceledFlag = searchParams.get('canceled') === '1'
@@ -416,20 +420,20 @@ export default function Checkout() {
   const onSubmitQuote = async () => {
     setPayError(null)
     if (!contactValid) { setPayError('Enter your email and full name before requesting the quote.'); return }
-    if (!quoteOnly) { setPayError('Quote requests must be submitted separately from regular store items.'); return }
+    if (!hasQuoteItems) { setPayError('There are no quote items to submit.'); return }
     setPaying(true)
     try {
       const response = await fetch('/api/quotes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer: { email: email.trim(), name: fullName.trim(), address: address.trim(), city: city.trim(), state: state.trim(), zip: zip.trim() },
-          items: items.map(({ product, qty }) => ({ name: product.name, qty, estimate: product.price, custom: sanitizeCustomMeta(product.custom) })),
+          items: quoteItems.map(({ product, qty }) => ({ name: product.name, qty, estimate: product.price, custom: sanitizeCustomMeta(product.custom) })),
         }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data.quoteId) { setPayError(data.error || 'Could not submit quote request'); return }
       setQuoteId(data.quoteId)
-      clear()
+      for (const { product } of quoteItems) removeItem(product.id)
     } catch { setPayError('Could not reach the quote server. Please try again.') } finally { setPaying(false) }
   }
 
@@ -457,7 +461,7 @@ export default function Checkout() {
     )
   }
 
-  if (quoteId) return <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-20 text-center"><CheckCircle2 className="h-16 w-16 text-lime"/><h1 className="mt-5 font-display text-3xl">Quote request received!</h1><p className="mt-3 text-mute">Nothing was charged. We’ll review the artwork and email the final price with a secure Stripe payment link.</p><div className="mt-5 rounded-xl border border-line bg-ink-2 px-5 py-3"><span className="text-xs font-bold uppercase text-mute">Quote number</span><strong className="block text-xl text-cream">{quoteId}</strong></div><Link to="/" className="btn-primary mt-6">Back to shop</Link></div>
+  if (quoteId) return <div className="mx-auto flex max-w-lg flex-col items-center px-4 py-20 text-center"><CheckCircle2 className="h-16 w-16 text-lime"/><h1 className="mt-5 font-display text-3xl">Quote request received!</h1><p className="mt-3 text-mute">Nothing was charged. We’ll review the artwork and email the final price with a secure Stripe payment link.</p><div className="mt-5 rounded-xl border border-line bg-ink-2 px-5 py-3"><span className="text-xs font-bold uppercase text-mute">Quote number</span><strong className="block text-xl text-cream">{quoteId}</strong></div>{items.length ? <button type="button" onClick={() => setQuoteId(null)} className="btn-primary mt-6">Continue checkout for remaining item{items.length === 1 ? '' : 's'}</button> : <Link to="/" className="btn-primary mt-6">Back to shop</Link>}</div>
 
   if (successPending || (successFlag && !orderId)) {
     return (
@@ -487,7 +491,7 @@ export default function Checkout() {
   return (
     <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1.1fr_0.9fr]">
       <div>
-        <h1 className="font-display text-3xl sm:text-4xl">{quoteOnly ? 'Request a quote' : 'Checkout'}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl">{mixedQuoteCart ? 'Quote & checkout' : quoteOnly ? 'Request a quote' : 'Checkout'}</h1>
         {IS_DEV ? (
           <p className="mt-1 text-sm text-mute">
             Stripe <span className="font-bold text-cyan">test mode</span> — no live charges until you use
@@ -537,9 +541,9 @@ export default function Checkout() {
           </fieldset>
 
           <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
-            <legend className="px-1 font-display text-lg">Shipping address {quoteOnly ? '(optional for now)' : '(optional prefill)'}</legend>
+            <legend className="px-1 font-display text-lg">Shipping address {hasQuoteItems ? '(optional for now)' : '(optional prefill)'}</legend>
             <p className="text-xs text-mute">
-              {quoteOnly ? 'You can add it now, or confirm it later when you pay the approved quote.' : 'You will confirm your shipping address on Stripe Checkout — that finalized address is what we use for the paid order. Fields here are optional prefill only.'}
+              {hasQuoteItems ? 'You can add it now, or confirm it later when you pay the approved quote.' : 'You will confirm your shipping address on Stripe Checkout — that finalized address is what we use for the paid order. Fields here are optional prefill only.'}
             </p>
             <input
               type="text"
@@ -577,7 +581,7 @@ export default function Checkout() {
             </div>
           </fieldset>
 
-          {!quoteOnly && <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
+          {!hasQuoteItems && <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
             <legend className="px-1 font-display text-lg">Payment</legend>
             <div className="rounded-xl border border-cyan/30 bg-ink px-4 py-4">
               <p className="text-sm font-bold text-cream">Pay with Stripe Checkout</p>
@@ -605,14 +609,14 @@ export default function Checkout() {
             )}
           </fieldset>}
 
-          {quoteOnly && <div className="rounded-2xl border border-lavender/40 bg-lavender/10 p-5"><p className="font-bold text-cream">No payment today</p><p className="mt-1 text-sm text-mute">Submit the request now. After we review it, you’ll receive the final price and a secure Stripe checkout link by email.</p></div>}
-          {mixedQuoteCart && <p role="alert" className="rounded-xl border border-pink/40 bg-pink/10 p-3 text-sm font-bold text-pink">Custom quote requests and regular products must be submitted separately. Remove one type from your cart before continuing.</p>}
+          {hasQuoteItems && <div className="rounded-2xl border border-lavender/40 bg-lavender/10 p-5"><p className="font-bold text-cream">No payment for the custom quote today</p><p className="mt-1 text-sm text-mute">Submit the quote first. We’ll keep any regular products in your cart so you can pay for those separately afterward.</p></div>}
+          {mixedQuoteCart && <p role="status" className="rounded-xl border border-cyan/40 bg-cyan/10 p-3 text-sm font-bold text-cream">Your cart has both a custom quote and regular products. Submit the quote first; the regular {regularItems.length === 1 ? 'item will' : 'items will'} remain for checkout.</p>}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            {quoteOnly ? <button type="button" onClick={onSubmitQuote} disabled={paying} className="btn-primary min-h-11 w-full sm:w-auto disabled:opacity-60">{paying ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : <>Submit quote request · no charge</>}</button> : <button
+            {hasQuoteItems ? <button type="button" onClick={onSubmitQuote} disabled={paying} className="btn-primary min-h-11 w-full sm:w-auto disabled:opacity-60">{paying ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : <>Submit quote request · no charge</>}</button> : <button
               type="button"
               onClick={onPayWithStripe}
-              disabled={paying || mixedQuoteCart}
+              disabled={paying}
               className="btn-primary min-h-11 w-full sm:w-auto disabled:opacity-60"
             >
               {paying ? (
@@ -623,7 +627,7 @@ export default function Checkout() {
                 <>Pay with Stripe · ${grandTotal.toFixed(2)}</>
               )}
             </button>}
-            {IS_DEV && !quoteOnly && (
+            {IS_DEV && !hasQuoteItems && (
               <button type="submit" className="btn-ghost min-h-11 w-full sm:w-auto">
                 Save demo order (no charge)
               </button>
@@ -723,11 +727,9 @@ export default function Checkout() {
         </ul>
 
         <div className="mt-5 space-y-2 border-t border-line pt-4 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-mute">{quoteOnly ? 'Estimated project price' : 'Subtotal'}</span>
-            <span className="font-bold">{quoteOnly ? '~' : ''}${total.toFixed(2)}</span>
-          </div>
-          {!quoteOnly && <div className="flex items-center justify-between gap-3">
+          {hasQuoteItems && <div className="flex items-center justify-between"><span className="text-mute">Custom quote estimate</span><span className="font-bold text-lavender">~${quoteEstimate.toFixed(2)}</span></div>}
+          {regularItems.length > 0 && <div className="flex items-center justify-between"><span className="text-mute">Regular products</span><span className="font-bold">${regularSubtotal.toFixed(2)}</span></div>}
+          {regularItems.length > 0 && <div className="flex items-center justify-between gap-3">
             <span className="text-mute">Shipping</span>
             <span className="text-right font-bold text-cream">
               {freeShip ? (
@@ -737,18 +739,18 @@ export default function Checkout() {
               )}
             </span>
           </div>}
-          {!quoteOnly && <p className="text-[11px] text-mute">
+          {regularItems.length > 0 && <p className="text-[11px] text-mute">
             {freeShip
               ? `Free shipping on orders over $${FREE_SHIPPING_THRESHOLD}`
               : `Flat $8 shipping · free over $${FREE_SHIPPING_THRESHOLD}`}
           </p>}
-          {!quoteOnly && <div className="flex items-center justify-between border-t border-line pt-3">
-            <span className="font-display text-lg">Total</span>
+          {regularItems.length > 0 && <div className="flex items-center justify-between border-t border-line pt-3">
+            <span className="font-display text-lg">Due for regular items</span>
             <span className="font-display text-xl text-lime">
               ${grandTotal.toFixed(2)}
             </span>
           </div>}
-          {quoteOnly && <p className="border-t border-line pt-3 text-xs text-mute">Final price and shipping will be confirmed before you pay.</p>}
+          {hasQuoteItems && <p className="border-t border-line pt-3 text-xs text-mute">The quote estimate is not included in any amount due. Final quote price and shipping will be confirmed before payment.</p>}
         </div>
 
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-line bg-ink/60 px-3 py-2.5">
