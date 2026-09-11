@@ -1,7 +1,19 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, CreditCard, Frame, Heart, Sparkles, StickyNote, Sticker } from 'lucide-react'
+import { ArrowRight, Camera, CreditCard, Frame, Heart, Sparkles, StickyNote, Sticker } from 'lucide-react'
 
 const doors = [
+  {
+    to: '/custom/photo-freshie',
+    title: 'Photo freshie',
+    blurb: 'A 3-inch round freshie with your picture printed in the center — $10.',
+    accent: 'from-lime to-cyan',
+    chip: 'text-lime',
+    btn: 'bg-lime text-ink',
+    border: 'border-lime/35 hover:border-lime/70',
+    glow: 'hover:shadow-[0_0_36px_rgba(200,245,66,0.14)]',
+    Icon: Camera,
+    cta: 'Make a photo freshie',
+  },
   {
     to: '/custom/logo-stickers',
     title: 'Logo stickers',
@@ -74,7 +86,7 @@ export default function CustomBanner() {
             <Sparkles className="h-3.5 w-3.5" /> Custom studio
           </p>
           <h2 className="mt-1 font-display text-2xl sm:text-3xl">
-            Five ways to make it yours
+            Six ways to make it yours
           </h2>
           <p className="mt-2 text-sm text-mute sm:text-base">
             Configure live, drop your art, request a quote. Final art approval by email

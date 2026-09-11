@@ -1,4 +1,4 @@
-/** Flat shipping: $8, free when merchandise subtotal is over $60. */
+/** Flat shipping: $8, free when merchandise subtotal is $60 or more. */
 
 export const FLAT_SHIPPING_CENTS = 800
 /** Dollar threshold (matches historical cart export). */
@@ -8,7 +8,7 @@ export const FREE_SHIPPING_THRESHOLD_CENTS = FREE_SHIPPING_THRESHOLD * 100
 /** Shipping fee in cents for a merchandise subtotal in cents. */
 export function shippingCentsForSubtotal(subtotalCents: number): number {
   const cents = Math.max(0, Math.round(Number(subtotalCents) || 0))
-  return cents > FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
+  return cents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
 }
 
 /** Shipping fee in dollars for a merchandise subtotal in dollars. */
@@ -17,5 +17,5 @@ export function shippingDollarsForSubtotal(subtotalDollars: number): number {
 }
 
 export function isFreeShipping(subtotalDollars: number): boolean {
-  return Number(subtotalDollars) > FREE_SHIPPING_THRESHOLD
+  return Number(subtotalDollars) >= FREE_SHIPPING_THRESHOLD
 }

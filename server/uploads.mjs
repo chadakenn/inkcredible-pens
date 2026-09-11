@@ -25,6 +25,7 @@ import {
   readJsonFile,
 } from './security.mjs'
 import { CHECKOUTS_DIR } from './checkouts.mjs'
+import { sanitizeSvgBuffer, svgPreviewPng } from './svg-artwork.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CUSTOM_UPLOAD_DIR = path.resolve(__dirname, '../uploads/custom')
@@ -81,6 +82,15 @@ function writeVerifiedBuffer(dir, buf) {
   return { filename, mime: detected.mime, size: buf.length, path: dest }
 }
 
+function writeNamedBuffer(dir, buf, ext) {
+  const filename = safeStoredName(ext)
+  const dest = path.join(dir, filename)
+  const tmp = `${dest}.${process.pid}.tmp`
+  writeFileSync(tmp, buf)
+  renameSync(tmp, dest)
+  return { filename, size: buf.length, path: dest }
+}
+
 /** Save a verified storefront product image from trusted server-side callers. */
 export function saveProductImageBuffer(buf) {
   const saved = writeVerifiedBuffer(PRODUCT_UPLOAD_DIR, buf)
@@ -102,7 +112,7 @@ export function saveSocialImageBuffer(buf) {
 export function mountUploads(app) {
   // --- Customer custom artwork (print files) ---
   app.post('/api/uploads/custom', customUploadLimit, (req, res) => {
-    memory.single('file')(req, res, (err) => {
+    memory.single('file')(req, res, async (err) => {
       if (err) {
         const code =
           err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE'
@@ -116,6 +126,25 @@ export function mountUploads(app) {
         return res.status(400).json({ error: 'missing_file' })
       }
       try {
+        const looksLikeSvg =
+          req.file.mimetype === 'image/svg+xml' ||
+          /\.svg$/i.test(req.file.originalname || '')
+        if (looksLikeSvg) {
+          const sanitized = sanitizeSvgBuffer(req.file.buffer)
+          const preview = await svgPreviewPng(sanitized)
+          const stored = writeNamedBuffer(CUSTOM_UPLOAD_DIR, sanitized, '.svg')
+          const adminUrl = `/api/admin/uploads/custom/${stored.filename}`
+          return res.json({
+            id: stored.filename,
+            fileName: req.file.originalname || stored.filename,
+            url: adminUrl,
+            adminUrl,
+            size: stored.size,
+            mime: 'image/svg+xml',
+            previewDataUrl: `data:image/png;base64,${preview.toString('base64')}`,
+            previewMime: 'image/png',
+          })
+        }
         const saved = writeVerifiedBuffer(CUSTOM_UPLOAD_DIR, req.file.buffer)
         // Admin-only download path — not world-readable static
         const adminUrl = `/api/admin/uploads/custom/${saved.filename}`
@@ -128,7 +157,10 @@ export function mountUploads(app) {
           mime: saved.mime,
         })
       } catch (e) {
-        if (e?.code === 'invalid_type' || e?.message === 'invalid_type') {
+        if (
+          e?.code === 'invalid_type' || e?.message === 'invalid_type' ||
+          e?.code === 'invalid_svg' || e?.code === 'unsafe_svg'
+        ) {
           return res.status(400).json({ error: 'invalid_type' })
         }
         console.error('[uploads/custom] save failed', e)
@@ -139,7 +171,7 @@ export function mountUploads(app) {
 
   app.get('/api/uploads/custom/:id', requireAdmin, (req, res) => {
     const id = path.basename(String(req.params.id || ''))
-    if (!id || id === '.' || id === '..' || !/^[a-f0-9-]{36}\.(jpe?g|png|webp|gif)$/i.test(id)) {
+    if (!id || id === '.' || id === '..' || !/^[a-f0-9-]{36}\.(jpe?g|png|webp|gif|svg)$/i.test(id)) {
       return res.status(400).json({ error: 'invalid_id' })
     }
     const filePath = path.join(CUSTOM_UPLOAD_DIR, id)
@@ -172,6 +204,12 @@ export function mountUploads(app) {
     }
     const detected = detectImageType(readFileSync(filePath))
     if (detected) res.type(detected.mime)
+    if (/\.svg$/i.test(name)) {
+      res.type('image/svg+xml')
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+      res.setHeader('Content-Disposition', 'attachment')
+    }
     if (String(req.query.download) === '1') {
       const original = String(req.query.filename || name).replace(/[^\w.\-()+ ]+/g, '_')
       res.setHeader(
@@ -294,7 +332,7 @@ function collectArtworkRefsFromValue(data, ids) {
       if (c.artworkId) ids.add(path.basename(String(c.artworkId)))
       if (c.artworkFileName) ids.add(path.basename(String(c.artworkFileName)))
       if (typeof c.artworkUrl === 'string') {
-        const m = /\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif))$/i.exec(c.artworkUrl)
+        const m = /\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif|svg))$/i.exec(c.artworkUrl)
         if (m) ids.add(m[1])
       }
     }
@@ -428,7 +466,7 @@ export function cleanupOrphanProductUploads(maxAgeMs = 0) {
   let keptReferenced = 0
   try {
     const files = readdirSync(PRODUCT_UPLOAD_DIR).filter((f) =>
-      /^[a-f0-9-]{36}\.(jpe?g|png|webp|gif)$/i.test(f),
+      /^[a-f0-9-]{36}\.(jpe?g|png|webp|gif|svg)$/i.test(f),
     )
     for (const f of files) {
       scanned += 1

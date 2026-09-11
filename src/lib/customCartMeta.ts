@@ -20,6 +20,11 @@ export function formatCustomCartMeta(custom: CustomLogoMeta | undefined): string
   if (custom.type === 'business-cards' || custom.cardPackQty != null) {
     return formatBusinessCardsCartMeta(custom.cardPackQty)
   }
+  if (custom.type === 'photo-freshie') {
+    return [custom.photoFreshieSize || '3-inch round', custom.freshieScent]
+      .filter(Boolean)
+      .join(' · ')
+  }
   if (custom.style) {
     return formatLogoCartMeta(custom.style, custom.cut, custom.stickerQty, custom.stickerSizeId ?? custom.stickerSize)
   }
@@ -40,10 +45,12 @@ export function isUniqueCustomLine(product: Product): boolean {
     c?.type === 'logo' ||
     c?.type === 'business-cards' ||
     c?.type === 'thank-you-cards' ||
+    c?.type === 'photo-freshie' ||
     product.id.startsWith('custom-logo-sticker') ||
     product.id.startsWith('custom-banner') ||
     product.id.startsWith('custom-canvas') ||
     product.id.startsWith('custom-business-cards') ||
-    product.id.startsWith('custom-thank-you-cards')
+    product.id.startsWith('custom-thank-you-cards') ||
+    product.id.startsWith('custom-photo-freshie')
   )
 }

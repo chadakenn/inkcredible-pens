@@ -13,6 +13,7 @@ import {
   readJsonFile,
   writeJsonAtomic,
 } from './security.mjs'
+import { archivePaidOrderArtwork } from './customer-files.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ORDERS_DIR = path.resolve(__dirname, '../data/orders')
@@ -136,15 +137,24 @@ export function createPaidOrder(input) {
     id = newOrderId()
   }
 
+  const createdAt =
+    typeof input.createdAt === 'string' && input.createdAt
+      ? input.createdAt
+      : new Date().toISOString()
+  const displayCode = newDisplayCode(orders)
+  const archivedItems = input.paid === true
+    ? archivePaidOrderArtwork(items, {
+        displayCode,
+        createdAt,
+        customerName: customer.name,
+      })
+    : items
   const order = {
     id,
-    displayCode: newDisplayCode(orders),
-    createdAt:
-      typeof input.createdAt === 'string' && input.createdAt
-        ? input.createdAt
-        : new Date().toISOString(),
+    displayCode,
+    createdAt,
     customer,
-    items,
+    items: archivedItems,
     status:
       typeof input.status === 'string' && STATUSES.has(input.status)
         ? input.status

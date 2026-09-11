@@ -91,6 +91,9 @@ function TrackingStatusChip({ order }: { order: Order }) {
 
 function itemMetaLine(custom?: CustomLogoMeta): string | null {
   if (!custom) return null
+  if (custom.type === 'photo-freshie') {
+    return `${custom.photoFreshieSize || '3-inch round'} · Scent: ${custom.freshieScent || 'Not selected'}`
+  }
   if (custom.type === 'banner') {
     return formatBannerCartMeta(custom.bannerSizeLabel, custom.bannerSides)
   }

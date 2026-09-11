@@ -15,7 +15,7 @@ export const FREE_SHIPPING_THRESHOLD_CENTS = 6000
 
 export function shippingCentsForSubtotal(subtotalCents) {
   const cents = Math.max(0, Math.round(Number(subtotalCents) || 0))
-  return cents > FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
+  return cents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
 }
 
 function roundMoney(n) {
@@ -35,9 +35,9 @@ const LOGO_STICKER_SIZES = {
 }
 
 const LOGO_STICKER_STYLES = {
-  vinyl: { id: 'vinyl', shortLabel: 'Vinyl', packQty: 100, unitPrice: 0.6 },
-  holo: { id: 'holo', shortLabel: 'Holo', packQty: 25, unitPrice: 1.0 },
-  glow: { id: 'glow', shortLabel: 'Glow', packQty: 25, unitPrice: 1.08 },
+  vinyl: { id: 'vinyl', shortLabel: 'Vinyl', packQty: 100, minQty: 50, unitPrice: 0.6 },
+  holo: { id: 'holo', shortLabel: 'Holo', packQty: 25, minQty: 5, unitPrice: 1.0 },
+  glow: { id: 'glow', shortLabel: 'Glow', packQty: 25, minQty: 5, unitPrice: 1.08 },
 }
 
 const LOGO_CUTS = {
@@ -67,7 +67,7 @@ function priceLogoStickers(config) {
     sizeKey = sizeKey.replace('"', '')
   }
   const unit = unitPriceForSize(style, sizeKey)
-  const qty = Math.max(1, Math.round(Number(config?.stickerQty) || style.packQty))
+  const qty = Math.max(style.minQty, Math.round(Number(config?.stickerQty) || style.packQty))
   const total = roundMoney(unit * qty)
   const cutLabel = LOGO_CUTS[config?.cut] ?? LOGO_CUTS.circle
   const sizeLabel = getLogoSize(sizeKey).label
@@ -88,6 +88,26 @@ function priceLogoStickers(config) {
       ...(config?.artworkFileName ? { artworkFileName: config.artworkFileName } : {}),
       ...(config?.fileName ? { fileName: config.fileName } : {}),
       ...(config?.logoComingByEmail ? { logoComingByEmail: true } : {}),
+    },
+  }
+}
+
+function pricePhotoFreshie(config) {
+  const scent = String(config?.freshieScent || '').trim().slice(0, 80)
+  if (!scent) throw Object.assign(new Error('missing_freshie_scent'), { code: 'missing_freshie_scent' })
+  return {
+    unitDollars: 10,
+    lineName: 'Custom Round Photo Freshie',
+    description: `3-inch round · Scent: ${scent}`,
+    custom: {
+      type: 'photo-freshie',
+      photoFreshieSize: '3-inch round',
+      freshieScent: scent,
+      ...(config?.freshieNote ? { freshieNote: String(config.freshieNote).slice(0, 500) } : {}),
+      ...(config?.artworkUrl ? { artworkUrl: config.artworkUrl } : {}),
+      ...(config?.artworkId ? { artworkId: config.artworkId } : {}),
+      ...(config?.artworkFileName ? { artworkFileName: config.artworkFileName } : {}),
+      ...(config?.fileName ? { fileName: config.fileName } : {}),
     },
   }
 }
@@ -246,6 +266,7 @@ function baseCatalogId(productId) {
 function detectCustomKind(productId, config) {
   const id = String(productId || '')
   const c = config && typeof config === 'object' ? config : {}
+  if (c.type === 'photo-freshie' || id.startsWith('custom-photo-freshie')) return 'photo-freshie'
   if (c.type === 'logo' || c.style || id.startsWith('custom-logo-sticker')) return 'logo'
   if (c.type === 'banner' || c.bannerSizeId || c.bannerSizeLabel || id.startsWith('custom-banner'))
     return 'banner'
@@ -272,6 +293,19 @@ export function priceCartLine(raw) {
   }
 
   const kind = detectCustomKind(productId, config)
+  if (kind === 'photo-freshie') {
+    const priced = pricePhotoFreshie(config || {})
+    const unitAmountCents = dollarsToCents(priced.unitDollars)
+    return {
+      productId,
+      name: priced.lineName,
+      description: priced.description,
+      quantity,
+      unitAmountCents,
+      amountCents: unitAmountCents,
+      custom: priced.custom,
+    }
+  }
   if (kind === 'logo') {
     const priced = priceLogoStickers(config || {})
     const unitAmountCents = dollarsToCents(priced.unitDollars)

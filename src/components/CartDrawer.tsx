@@ -87,7 +87,7 @@ export default function CartDrawer() {
             />
           </div>
           <p className="mt-1.5 text-[11px] text-mute">
-            Flat $8 shipping · free over ${FREE_SHIPPING_THRESHOLD.toFixed(0)}
+            Free shipping on orders ${FREE_SHIPPING_THRESHOLD.toFixed(0)}+ · otherwise $8
           </p>
         </div>
 
@@ -185,23 +185,29 @@ export default function CartDrawer() {
                       </button>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
-                      <div className="inline-flex items-center rounded-full border border-line">
-                        <button
-                          type="button"
-                          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-mute hover:text-cream active:text-cream"
-                          onClick={() => setQty(product.id, qty - 1)}
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                        </button>
-                        <span className="min-w-6 text-center text-sm font-bold">{qty}</span>
-                        <button
-                          type="button"
-                          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-mute hover:text-cream active:text-cream"
-                          onClick={() => setQty(product.id, qty + 1)}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      {product.custom?.type === 'logo' && product.custom.stickerQty ? (
+                        <p className="text-xs font-bold text-mute">
+                          {product.custom.stickerQty} stickers configured
+                        </p>
+                      ) : (
+                        <div className="inline-flex items-center rounded-full border border-line">
+                          <button
+                            type="button"
+                            className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-mute hover:text-cream active:text-cream"
+                            onClick={() => setQty(product.id, qty - 1)}
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="min-w-6 text-center text-sm font-bold">{qty}</span>
+                          <button
+                            type="button"
+                            className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-mute hover:text-cream active:text-cream"
+                            onClick={() => setQty(product.id, qty + 1)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
                       <p className="font-display text-sm text-lime">
                         ${(product.price * qty).toFixed(2)}
                       </p>

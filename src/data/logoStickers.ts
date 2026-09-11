@@ -54,6 +54,8 @@ export interface LogoStickerStyle {
   /** Default size label (unused for pricing — size picker drives price) */
   size: string
   packQty: number
+  /** Smallest custom quantity a customer may order for this material. */
+  minQty: number
   /** 3″ pack display price (baseline) */
   packPrice: number
   /** 3″ unit price (baseline for area scaling) */
@@ -69,6 +71,7 @@ export const LOGO_STICKER_STYLES: LogoStickerStyle[] = [
     shortLabel: 'Vinyl',
     size: '3"',
     packQty: 100,
+    minQty: 50,
     packPrice: 60,
     unitPrice: 0.6,
     blurb: 'Tough everyday vinyl — classic pick.',
@@ -80,6 +83,7 @@ export const LOGO_STICKER_STYLES: LogoStickerStyle[] = [
     shortLabel: 'Holo',
     size: '3"',
     packQty: 25,
+    minQty: 5,
     packPrice: 25,
     unitPrice: 1.0,
     blurb: 'Shimmery catch-light drama.',
@@ -91,6 +95,7 @@ export const LOGO_STICKER_STYLES: LogoStickerStyle[] = [
     shortLabel: 'Glow',
     size: '3"',
     packQty: 25,
+    minQty: 5,
     packPrice: 27,
     unitPrice: 1.08,
     blurb: 'Lights out, logo on.',

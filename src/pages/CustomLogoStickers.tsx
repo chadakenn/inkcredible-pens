@@ -35,7 +35,7 @@ import {
   validateCustomArtworkFile,
 } from '../lib/uploadCustomArtwork'
 
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif'
+const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg'
 
 export default function CustomLogoStickers() {
   useDocumentTitle('Custom logo stickers')
@@ -74,7 +74,8 @@ export default function CustomLogoStickers() {
     setNudgeUpload(false)
   }
 
-  const clampQty = (n: number) => Math.max(1, Math.min(10_000, Math.floor(n) || 1))
+  const clampQty = (n: number) =>
+    Math.max(style.minQty, Math.min(10_000, Math.floor(n) || style.minQty))
 
   const readFile = useCallback(async (file: File) => {
     const validation = validateCustomArtworkFile(file)
@@ -87,7 +88,8 @@ export default function CustomLogoStickers() {
     setFileName(file.name)
     setNudgeUpload(false)
     if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
-    const localPreview = URL.createObjectURL(file)
+    const isSvg = file.type === 'image/svg+xml' || /\\.svg$/i.test(file.name)
+    const localPreview = isSvg ? null : URL.createObjectURL(file)
     setPreviewUrl(localPreview)
     setArtworkUrl(null)
     setArtworkId(null)
@@ -108,10 +110,15 @@ export default function CustomLogoStickers() {
       setArtworkId(uploaded.id)
       setArtworkFileName(uploaded.fileName)
       setFileName(uploaded.fileName)
-      // Keep blob preview on page; small-ish data URL for cart (admin URL is not public)
-      if (dataUrl && dataUrl.length < 400_000) setLogoPreviewData(dataUrl)
+      const safePreview = uploaded.previewDataUrl || dataUrl
+      if (uploaded.previewDataUrl) {
+        if (localPreview) URL.revokeObjectURL(localPreview)
+        setPreviewUrl(uploaded.previewDataUrl)
+      }
+      // The server-rendered PNG is used for SVG; raster uploads retain their local preview.
+      if (safePreview && safePreview.length < 400_000) setLogoPreviewData(safePreview)
     } catch (err) {
-      URL.revokeObjectURL(localPreview)
+      if (localPreview) URL.revokeObjectURL(localPreview)
       setPreviewUrl(null)
       setFileName(null)
       setArtworkUrl(null)
@@ -273,7 +280,7 @@ export default function CustomLogoStickers() {
                 <p className="font-display text-lg text-cream">
                   Drop your logo here or tap to upload
                 </p>
-                <p className="mt-1 text-xs text-mute">PNG · JPG · WebP · SVG · preview only</p>
+                <p className="mt-1 text-xs text-mute">PNG · JPG · WebP · GIF · SVG · max 12MB</p>
               </div>
             </div>
 
@@ -299,6 +306,7 @@ export default function CustomLogoStickers() {
                       key={shape.id}
                       type="button"
                       onClick={() => setMockShape(shape.id)}
+                      aria-pressed={mockShape === shape.id}
                       className={`min-h-9 rounded-full px-3 text-xs font-bold transition ${
                         mockShape === shape.id
                           ? 'bg-cream text-ink'
@@ -395,6 +403,7 @@ export default function CustomLogoStickers() {
                       key={s.id}
                       type="button"
                       onClick={() => pickStyle(s.id)}
+                      aria-pressed={active}
                       className={`min-h-14 rounded-2xl border px-4 py-3 text-left transition ${
                         active
                           ? 'border-transparent bg-ink shadow-[0_0_0_2px_var(--ring)]'
@@ -441,6 +450,7 @@ export default function CustomLogoStickers() {
                           setSizeId(s.id)
                           setNudgeUpload(false)
                         }}
+                        aria-pressed={sizeId === s.id}
                         className={`min-h-12 min-w-14 rounded-2xl border px-3 text-sm font-extrabold transition ${
                           sizeId === s.id
                             ? 'border-cyan bg-cream text-ink'
@@ -460,6 +470,7 @@ export default function CustomLogoStickers() {
                         key={n}
                         type="button"
                         onClick={() => setQty(n)}
+                        aria-pressed={qty === n}
                         className={`min-h-12 min-w-[5.5rem] rounded-2xl border px-4 py-2 font-display text-lg transition ${
                           qty === n
                             ? 'border-lime bg-lime text-ink'
@@ -485,7 +496,7 @@ export default function CustomLogoStickers() {
                   </button>
                   <input
                     type="number"
-                    min={1}
+                    min={style.minQty}
                     max={10000}
                     value={qty}
                     onChange={(e) => setQty(clampQty(Number(e.target.value)))}
@@ -505,6 +516,7 @@ export default function CustomLogoStickers() {
                   Unit <span className="font-bold text-cream">${unitPrice.toFixed(2)}</span>
                   <span className="text-mute"> · {size.label}</span>
                 </p>
+                <p className="text-xs text-mute">Minimum {style.minQty}</p>
               </div>
 
               <div className="mt-5 rounded-2xl border border-lime/30 bg-lime/10 px-4 py-3">

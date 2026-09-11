@@ -14,6 +14,7 @@ import { mountOrders, createPaidOrder, findOrderByStripeSession } from './orders
 import { mountTracking, startTrackingPoll } from './tracking.mjs'
 import { mountCatalog, readProducts, writeProducts } from './catalog.mjs'
 import { mountScents } from './scents.mjs'
+import { mountCustomerFiles } from './customer-files.mjs'
 import { mountListingsMcp } from './listings-mcp.mjs'
 import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
@@ -168,6 +169,7 @@ app.use(express.json({ limit: '2mb' }))
 
 mountAdminAuth(app)
 mountUploads(app)
+mountCustomerFiles(app)
 mountOrders(app)
 mountTracking(app)
 mountCatalog(app)

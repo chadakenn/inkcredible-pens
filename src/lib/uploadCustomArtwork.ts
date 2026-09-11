@@ -9,15 +9,18 @@ export type UploadedArtwork = {
   adminUrl?: string
   size: number
   mime: string
+  /** Safe raster preview returned when the original upload is SVG. */
+  previewDataUrl?: string
+  previewMime?: string
 }
 
-const ACCEPT_RE = /image\/(png|jpeg|webp|gif)/
-const EXT_RE = /\.(png|jpe?g|webp|gif)$/i
+const ACCEPT_RE = /image\/(png|jpeg|webp|gif|svg\+xml)/
+const EXT_RE = /\.(png|jpe?g|webp|gif|svg)$/i
 export const CUSTOM_ARTWORK_MAX_BYTES = 12 * 1024 * 1024
 
 export function validateCustomArtworkFile(file: File): string | null {
   const okType = ACCEPT_RE.test(file.type) || EXT_RE.test(file.name)
-  if (!okType) return 'Please upload PNG, JPG, WebP, or GIF (no SVG).'
+  if (!okType) return 'Please upload PNG, JPG, WebP, GIF, or SVG.'
   if (file.size > CUSTOM_ARTWORK_MAX_BYTES) {
     return 'Keep it under 12MB.'
   }
@@ -40,7 +43,7 @@ export async function uploadCustomArtwork(file: File): Promise<UploadedArtwork> 
       code === 'file_too_large'
         ? 'File is too large (max 12MB).'
         : code === 'invalid_type'
-          ? 'Please upload PNG, JPG, WebP, or GIF (no SVG).'
+          ? 'Please upload a valid PNG, JPG, WebP, GIF, or SVG.'
           : code === 'rate_limited'
             ? 'Too many uploads — wait a few minutes and try again.'
             : 'Upload failed — you can email the file later.',
@@ -53,6 +56,8 @@ export async function uploadCustomArtwork(file: File): Promise<UploadedArtwork> 
     adminUrl: data.adminUrl ? String(data.adminUrl) : String(data.url),
     size: Number(data.size) || file.size,
     mime: String(data.mime || file.type || 'application/octet-stream'),
+    previewDataUrl: data.previewDataUrl ? String(data.previewDataUrl) : undefined,
+    previewMime: data.previewMime ? String(data.previewMime) : undefined,
   }
 }
 

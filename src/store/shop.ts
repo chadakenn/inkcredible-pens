@@ -31,6 +31,11 @@ export function pathForCategory(label: string): string {
     return '/custom/logo-stickers'
   }
   if (key === 'custom banners' || key === 'banners') return '/custom/banners'
+  if (
+    key === 'custom photo freshie' ||
+    key === 'photo freshie' ||
+    key === 'custom freshie'
+  ) return '/custom/photo-freshie'
   if (key === 'custom canvas') return '/custom/canvas'
   if (
     key === 'custom business cards' ||

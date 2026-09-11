@@ -84,7 +84,7 @@ function addressText(customer) {
 }
 
 const HIDDEN_CUSTOM_KEYS = new Set([
-  'artworkUrl', 'artworkId', 'artworkFileName', 'fileName', 'estimateOnly',
+  'artworkUrl', 'artworkId', 'artworkFileName', 'fileName', 'archivedArtworkPath', 'estimateOnly',
 ])
 
 const FRIENDLY_LABELS = {
@@ -93,6 +93,7 @@ const FRIENDLY_LABELS = {
   bannerWidthFt: 'Banner width', bannerHeightFt: 'Banner height', bannerSides: 'Banner sides',
   bannerNotes: 'Banner notes', canvasSizeLabel: 'Canvas size', canvasFinish: 'Canvas finish',
   canvasNotes: 'Canvas notes', cardPackQty: 'Card quantity', cardNotes: 'Card notes',
+  photoFreshieSize: 'Freshie size', freshieScent: 'Scent', freshieNote: 'Freshie note',
   scent: 'Scent', scentName: 'Scent', selectedScent: 'Scent', color: 'Color',
   colorName: 'Color', notes: 'Notes', logoComingByEmail: 'Logo coming by email',
 }

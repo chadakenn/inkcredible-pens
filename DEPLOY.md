@@ -11,7 +11,8 @@
 │   ├── orders/
 │   ├── catalog/          # products.json + scents.json (server-side)
 │   ├── admin/            # PIN + session secret (gitignored; mode 750)
-│   └── checkouts/        # pending Stripe checkouts (gitignored)
+│   ├── checkouts/        # pending Stripe checkouts (gitignored)
+│   └── customer-files/   # paid-order artwork fallback; dedicated mount recommended
 ├── uploads/              # SACRED (owner: inkcredible)
 │   ├── custom/           # customer print files (admin-only serve)
 │   ├── products/         # public storefront photos
@@ -82,6 +83,7 @@ ADMIN_PIN=....                  # REQUIRED strong PIN — NOT 1234 (boot refuses
 # TRACK17_API_KEY=...          # optional — package watch; see TRACKING.md
 # TRACKING_POLL_MINUTES=45
 # CHECKOUT_RETENTION_DAYS=7
+# CUSTOMER_FILES_DIR=/mnt/customer-files # dedicated paid-order artwork mount
 # AUTH0_ISSUER_BASE_URL=https://YOUR-TENANT.us.auth0.com # optional ChatGPT listings
 # AUTH0_AUDIENCE=https://inkcredible.kennedyshome.com/mcp
 # LISTING_ALLOWED_EMAILS=chadakennedy86@gmail.com,kelliekennedy81@gmail.com
@@ -101,6 +103,19 @@ chmod 750 data data/orders data/catalog data/admin data/checkouts uploads/custom
 chmod 755 uploads uploads/products uploads/social # public assets; still owned by inkcredible
 # Optional: bind-mount these from a Proxmox volume/dataset
 ```
+
+For a dedicated paid-order artwork mount, attach Proxmox storage to the LXC at
+`/mnt/customer-files`, enable backup for that mount point, and run inside the guest:
+
+```bash
+mkdir -p /mnt/customer-files
+chown inkcredible:inkcredible /mnt/customer-files
+chmod 750 /mnt/customer-files
+```
+
+Set `CUSTOMER_FILES_DIR=/mnt/customer-files` in `.env`. Paid artwork is copied into
+`YYYY/MM/Customer-Name_IP-order-code/` folders and remains downloadable only through authenticated Store
+Manager order records. Abandoned pre-checkout uploads continue to expire separately.
 
 **Disk quota guidance:** customer artwork under `uploads/custom/` can grow. Plan volume size for peak concurrent carts × ~12MB + headroom (e.g. 5–20 GB). Retention jobs (startup + daily) delete abandoned custom uploads / checkout JSON older than 7 days by default, and remove unreferenced product photos.
 

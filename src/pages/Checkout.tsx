@@ -741,8 +741,8 @@ export default function Checkout() {
           </div>}
           {regularItems.length > 0 && <p className="text-[11px] text-mute">
             {freeShip
-              ? `Free shipping on orders over $${FREE_SHIPPING_THRESHOLD}`
-              : `Flat $8 shipping · free over $${FREE_SHIPPING_THRESHOLD}`}
+              ? `Free shipping on orders $${FREE_SHIPPING_THRESHOLD}+`
+              : `Flat $8 shipping · free on $${FREE_SHIPPING_THRESHOLD}+`}
           </p>}
           {regularItems.length > 0 && <div className="flex items-center justify-between border-t border-line pt-3">
             <span className="font-display text-lg">Due for regular items</span>

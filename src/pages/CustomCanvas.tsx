@@ -27,7 +27,7 @@ import {
 } from '../lib/uploadCustomArtwork'
 import GraphicsLogo from '../components/GraphicsLogo'
 
-const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif'
+const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.gif,.svg'
 
 export default function CustomCanvas() {
   useDocumentTitle('Custom canvas')
@@ -63,7 +63,8 @@ export default function CustomCanvas() {
     setUploading(true)
     setFileName(file.name)
     if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
-    const localPreview = URL.createObjectURL(file)
+    const isSvg = file.type === 'image/svg+xml' || /\\.svg$/i.test(file.name)
+    const localPreview = isSvg ? null : URL.createObjectURL(file)
     setPreviewUrl(localPreview)
     setArtworkUrl(null)
     setArtworkId(null)
@@ -84,10 +85,15 @@ export default function CustomCanvas() {
       setArtworkId(uploaded.id)
       setArtworkFileName(uploaded.fileName)
       setFileName(uploaded.fileName)
-      // Keep blob preview on page; small-ish data URL for cart (admin URL is not public)
-      if (dataUrl && dataUrl.length < 400_000) setLogoPreviewData(dataUrl)
+      const safePreview = uploaded.previewDataUrl || dataUrl
+      if (uploaded.previewDataUrl) {
+        if (localPreview) URL.revokeObjectURL(localPreview)
+        setPreviewUrl(uploaded.previewDataUrl)
+      }
+      // The server-rendered PNG is used for SVG; raster uploads retain their local preview.
+      if (safePreview && safePreview.length < 400_000) setLogoPreviewData(safePreview)
     } catch (err) {
-      URL.revokeObjectURL(localPreview)
+      if (localPreview) URL.revokeObjectURL(localPreview)
       setPreviewUrl(null)
       setFileName(null)
       setArtworkUrl(null)
@@ -241,7 +247,7 @@ export default function CustomCanvas() {
                 <p className="font-display text-lg text-cream">
                   Drop your image here or tap to upload
                 </p>
-                <p className="mt-1 text-xs text-mute">PNG · JPG · WebP · SVG · preview only</p>
+                <p className="mt-1 text-xs text-mute">PNG · JPG · WebP · GIF · SVG · max 12MB</p>
               </div>
             </div>
 

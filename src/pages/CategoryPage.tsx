@@ -10,6 +10,7 @@ import {
   PackageOpen,
   CreditCard,
   Heart,
+  Camera,
 } from 'lucide-react'
 import type { Category, Product } from '../data/products'
 import { useCatalog } from '../store/catalog'
@@ -68,6 +69,19 @@ function nameStartsWithLetter(name: string, letter: string): boolean {
 }
 
 const studioCards = [
+  {
+    to: '/custom/photo-freshie',
+    title: 'Photo freshie',
+    blurb: 'A 3-inch round scented freshie with your photo in the center — $10.',
+    label: 'Configurator',
+    labelClass: 'text-lime',
+    border: 'border-lime/40 hover:border-lime/70',
+    glow: 'shadow-[0_0_40px_rgba(200,245,66,0.12)]',
+    bar: 'from-lime to-cyan',
+    bg: 'to-lime/10',
+    btn: 'bg-lime text-ink',
+    Icon: Camera,
+  },
   {
     to: '/custom/logo-stickers',
     title: 'Logo stickers',

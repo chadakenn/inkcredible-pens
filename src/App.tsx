@@ -20,6 +20,7 @@ import CustomBanners from './pages/CustomBanners'
 import CustomCanvas from './pages/CustomCanvas'
 import CustomBusinessCards from './pages/CustomBusinessCards'
 import CustomThankYouCards from './pages/CustomThankYouCards'
+import CustomPhotoFreshie from './pages/CustomPhotoFreshie'
 import SearchPage from './pages/SearchPage'
 import NotFound from './pages/NotFound'
 import Contact from './pages/Contact'
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/custom/canvas" element={<CustomCanvas />} />
           <Route path="/custom/business-cards" element={<CustomBusinessCards />} />
           <Route path="/custom/thank-you-cards" element={<CustomThankYouCards />} />
+          <Route path="/custom/photo-freshie" element={<CustomPhotoFreshie />} />
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/contact" element={<Contact />} />
