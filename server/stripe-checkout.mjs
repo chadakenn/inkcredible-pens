@@ -15,6 +15,7 @@ import { mountTracking, startTrackingPoll } from './tracking.mjs'
 import { mountCatalog, readProducts, writeProducts } from './catalog.mjs'
 import { mountScents } from './scents.mjs'
 import { mountCustomerFiles } from './customer-files.mjs'
+import { mountProofs } from './proofs.mjs'
 import { mountListingsMcp } from './listings-mcp.mjs'
 import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
@@ -171,6 +172,7 @@ mountAdminAuth(app)
 mountUploads(app)
 mountCustomerFiles(app)
 mountOrders(app)
+mountProofs(app)
 mountTracking(app)
 mountCatalog(app)
 mountScents(app)

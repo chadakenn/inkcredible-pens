@@ -184,6 +184,12 @@ export function findOrderById(id) {
   return readOrders().find((o) => o.id === id) ?? null
 }
 
+export function findOrderByProofToken(token) {
+  const value = String(token || '')
+  if (!/^[a-f0-9]{32}$/i.test(value)) return null
+  return readOrders().find((o) => o.proofToken === value) ?? null
+}
+
 export function listOrders() {
   return readOrders()
 }
@@ -262,8 +268,9 @@ export function mountOrders(app) {
     const hasNumber = Object.prototype.hasOwnProperty.call(body, 'trackingNumber')
     const hasShippedAt = Object.prototype.hasOwnProperty.call(body, 'shippedAt')
     const hasArchivedAt = Object.prototype.hasOwnProperty.call(body, 'archivedAt')
+    const hasProductionNotes = Object.prototype.hasOwnProperty.call(body, 'productionNotes')
 
-    if (!hasStatus && !hasCarrier && !hasNumber && !hasShippedAt && !hasArchivedAt) {
+    if (!hasStatus && !hasCarrier && !hasNumber && !hasShippedAt && !hasArchivedAt && !hasProductionNotes) {
       return res.status(400).json({ error: 'no_updates' })
     }
 
@@ -328,6 +335,13 @@ export function mountOrders(app) {
       } catch {
         return res.status(400).json({ error: 'invalid_archivedAt' })
       }
+    }
+
+    if (hasProductionNotes) {
+      if (typeof body.productionNotes !== 'string' || body.productionNotes.length > 4000) {
+        return res.status(400).json({ error: 'invalid_production_notes' })
+      }
+      next.productionNotes = body.productionNotes.trim()
     }
 
     orders[idx] = next

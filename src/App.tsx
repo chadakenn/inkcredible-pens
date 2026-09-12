@@ -24,6 +24,7 @@ import CustomPhotoFreshie from './pages/CustomPhotoFreshie'
 import SearchPage from './pages/SearchPage'
 import NotFound from './pages/NotFound'
 import Contact from './pages/Contact'
+import ProofApproval from './pages/ProofApproval'
 import { useCatalog } from './store/catalog'
 import { useScents } from './store/scents'
 
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/proof/:token" element={<ProofApproval />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/orders" element={<AdminOrders />} />
           <Route path="*" element={<NotFound />} />

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Archive, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, Printer, RefreshCw, RotateCcw, Search, Trash2, Truck } from 'lucide-react'
+import { Archive, CheckCircle2, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, Printer, RefreshCw, RotateCcw, Save, Search, Send, ShoppingCart, Trash2, Truck, X } from 'lucide-react'
 import { formatBannerCartMeta } from '../../data/banners'
 import { formatBusinessCardsCartMeta } from '../../data/businessCards'
 import { formatThankYouCardsCartMeta } from '../../data/thankYouCards'
 import { formatCanvasCartMeta } from '../../data/canvasPrints'
 import { formatLogoCartMeta } from '../../data/logoStickers'
-import type { CustomLogoMeta } from '../../data/products'
+import type { Category, CustomLogoMeta, Product } from '../../data/products'
+import { patchOrder, requestOrderProof } from '../../lib/ordersApi'
 import { customPreviewSrc, downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 import { paidSalesSummary } from '../../lib/salesSummary'
 import { buildPackingSlipHtml } from '../../lib/packingSlip'
@@ -20,6 +21,7 @@ import {
   type OrderStatus,
   type TrackingStatus,
 } from '../../store/orders'
+import { useCart } from '../../store/cart'
 
 const STATUS_BTNS: { id: OrderStatus; className: string }[] = [
   { id: 'new', className: 'bg-cyan text-ink' },
@@ -121,6 +123,7 @@ function AdminArtThumb({
   artUrl?: string
 }) {
   const [src, setSrc] = useState(preview || '')
+  const [large, setLarge] = useState(false)
   useEffect(() => {
     let revoked: string | null = null
     let cancelled = false
@@ -148,15 +151,38 @@ function AdminArtThumb({
   }, [preview, artUrl])
   if (!src) return null
   return (
-    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1">
+    <>
+    <button type="button" onClick={() => setLarge(true)} title="Open large artwork preview" className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1 transition hover:border-cyan">
       <img
         src={src}
         alt="Customer artwork preview"
         className="h-full w-full object-contain"
         onError={() => setSrc('')}
       />
-    </div>
+    </button>
+    {large && <div role="dialog" aria-modal="true" aria-label="Artwork preview" onClick={() => setLarge(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
+      <button type="button" onClick={() => setLarge(false)} className="absolute right-5 top-5 flex h-12 w-12 items-center justify-center rounded-full bg-ink-2 text-cream"><X className="h-6 w-6" /></button>
+      <img src={src} alt="Large customer artwork preview" onClick={(event) => event.stopPropagation()} className="max-h-[90vh] max-w-[95vw] rounded-2xl bg-white object-contain" />
+    </div>}
+    </>
   )
+}
+
+function reorderProduct(order: Order, item: Order['items'][number], index: number): Product {
+  const customType = item.custom?.type
+  const category: Category = customType === 'canvas' ? 'Canvas' : customType === 'photo-freshie' ? 'Car Freshies' : customType ? 'Custom' : 'Pens'
+  const art: Product['art'] = customType === 'canvas' ? 'pack' : customType === 'photo-freshie' ? 'freshie' : customType ? 'sticker' : 'pen'
+  return {
+    id: `${item.productId || `reorder-${order.id}-${index}`}__reorder__${Date.now()}-${index}`,
+    name: item.name,
+    category,
+    price: item.price,
+    tagline: `Reorder from ${order.displayCode || order.id}`,
+    description: `Reorder using the saved details and artwork from ${order.displayCode || order.id}.`,
+    accent: '#26d9ff',
+    art,
+    custom: item.custom ? { ...item.custom } : undefined,
+  }
 }
 
 function OrderCard({
@@ -176,6 +202,9 @@ function OrderCard({
   const refreshTracking = useOrders((s) => s.refreshTracking)
   const removeOrder = useOrders((s) => s.removeOrder)
   const setArchived = useOrders((s) => s.setArchived)
+  const patchLocalOrder = useOrders((s) => s.patchLocalOrder)
+  const addCartItem = useCart((s) => s.addItem)
+  const openCart = useCart((s) => s.openCart)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [carrier, setCarrier] = useState(order.trackingCarrier || 'USPS')
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '')
@@ -183,6 +212,9 @@ function OrderCard({
   const [trackingRefreshing, setTrackingRefreshing] = useState(false)
   const [trackingMsg, setTrackingMsg] = useState<string | null>(null)
   const [archiveBusy, setArchiveBusy] = useState(false)
+  const [productionNotes, setProductionNotes] = useState(order.productionNotes || '')
+  const [proofMessage, setProofMessage] = useState(order.proofMessage || '')
+  const [workflowBusy, setWorkflowBusy] = useState(false)
 
   const printPackingSlip = () => {
     const popup = window.open('', '_blank', 'width=900,height=760')
@@ -201,6 +233,11 @@ function OrderCard({
     setCarrier(order.trackingCarrier || 'USPS')
     setTrackingNumber(order.trackingNumber || '')
   }, [order.id, order.trackingCarrier, order.trackingNumber])
+
+  useEffect(() => {
+    setProductionNotes(order.productionNotes || '')
+    setProofMessage(order.proofMessage || '')
+  }, [order.id, order.productionNotes, order.proofMessage])
 
   return (
     <li className="overflow-hidden rounded-3xl border border-line bg-ink-2">
@@ -323,6 +360,39 @@ function OrderCard({
               )
             })}
           </ul>
+
+          <div className="rounded-2xl border border-lavender/35 bg-ink p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-extrabold uppercase tracking-wider text-lavender">Artwork &amp; production</p>
+                <p className="mt-1 text-sm text-mute">Save shop notes, send a proof, or rebuild this job in the cart.</p>
+              </div>
+              {order.proofStatus === 'approved' ? <span className="inline-flex items-center gap-1.5 rounded-full bg-lime/15 px-3 py-1 text-xs font-extrabold text-lime"><CheckCircle2 className="h-4 w-4" /> Approved {order.proofApprovedAt ? formatWhen(order.proofApprovedAt) : ''}</span> : order.proofStatus === 'pending' ? <span className="rounded-full bg-lavender/20 px-3 py-1 text-xs font-extrabold text-lavender">Proof emailed · waiting</span> : null}
+            </div>
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-xs font-bold text-mute">Production notes (manager only)</span>
+              <textarea value={productionNotes} onChange={(event) => setProductionNotes(event.target.value)} maxLength={4000} placeholder="Material, dimensions, print settings, finishing, scent, or special instructions…" className="min-h-24 w-full rounded-xl border border-line bg-ink-2 p-3 text-sm text-cream outline-none placeholder:text-mute focus:border-cyan" />
+            </label>
+            <button type="button" disabled={workflowBusy} onClick={() => {
+              setWorkflowBusy(true); setTrackingMsg(null)
+              void patchOrder(order.id, { productionNotes }).then((updated) => { patchLocalOrder(updated); setTrackingMsg('Production notes saved.') }).catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not save notes.')).finally(() => setWorkflowBusy(false))
+            }} className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan/40 bg-cyan/10 px-3 text-sm font-extrabold text-cyan disabled:opacity-50"><Save className="h-4 w-4" /> Save production notes</button>
+
+            {(order.items || []).some((item) => item.custom?.archivedArtworkPath || item.custom?.logoDataUrl) && <div className="mt-4 border-t border-line pt-4">
+              <label className="block"><span className="mb-1.5 block text-xs font-bold text-mute">Message with proof email (optional)</span><textarea value={proofMessage} onChange={(event) => setProofMessage(event.target.value)} maxLength={1000} placeholder="Please check the spelling and layout…" className="min-h-20 w-full rounded-xl border border-line bg-ink-2 p-3 text-sm text-cream outline-none placeholder:text-mute focus:border-lavender" /></label>
+              <button type="button" disabled={workflowBusy || order.proofStatus === 'approved'} onClick={() => {
+                if (!window.confirm(order.proofStatus === 'pending' ? 'Send this proof email again?' : 'Email this artwork proof to the customer?')) return
+                setWorkflowBusy(true); setTrackingMsg(null)
+                void requestOrderProof(order.id, proofMessage).then(({ order: updated }) => { patchLocalOrder(updated); setTrackingMsg('Proof email queued for the customer.') }).catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not send proof.')).finally(() => setWorkflowBusy(false))
+              }} className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-xl bg-lavender px-4 text-sm font-extrabold text-ink disabled:opacity-40"><Send className="h-4 w-4" /> {order.proofStatus === 'pending' ? 'Resend proof email' : order.proofStatus === 'approved' ? 'Artwork approved' : 'Email proof for approval'}</button>
+            </div>}
+
+            <button type="button" onClick={() => {
+              order.items.forEach((item, index) => addCartItem(reorderProduct(order, item, index), item.qty))
+              openCart()
+              setTrackingMsg('Reorder added to the cart with saved details and artwork.')
+            }} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-lime/40 bg-lime/10 px-4 text-sm font-extrabold text-lime"><ShoppingCart className="h-4 w-4" /> Reorder this job</button>
+          </div>
 
           <div className="rounded-2xl border border-line bg-ink p-4">
             <p className="mb-3 flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-mute">

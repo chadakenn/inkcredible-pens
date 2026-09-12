@@ -32,6 +32,7 @@ export interface OrderCustomer {
 }
 
 export interface OrderItemSnapshot {
+  productId?: string
   name: string
   price: number
   qty: number
@@ -57,6 +58,13 @@ export interface Order {
   trackingCheckedAt?: string
   deliveredAt?: string
   archivedAt?: string
+  productionNotes?: string
+  proofToken?: string
+  proofStatus?: 'pending' | 'approved'
+  proofRequestedAt?: string
+  proofApprovedAt?: string
+  proofMessage?: string
+  proofRevision?: number
 }
 
 export interface OrderTrackingInput {

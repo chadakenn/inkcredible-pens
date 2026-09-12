@@ -55,6 +55,7 @@ export function buildPackingSlipHtml(
     <div><h1>Order ${escapeHtml(code)}</h1><div class="muted">Ordered ${escapeHtml(ordered)} ET</div></div></div>
   <section class="ship"><h2>Ship to</h2><strong>${escapeHtml(order.customer.name)}</strong><br>${escapeHtml(order.customer.address)}<br>${escapeHtml(order.customer.city)}, ${escapeHtml(order.customer.state)} ${escapeHtml(order.customer.zip)}<div class="muted">${escapeHtml(order.customer.email)}</div></section>
   <section class="items"><h2>Items to pack (${order.items.reduce((sum, item) => sum + item.qty, 0)})</h2><ul>${items}</ul></section>
+  ${order.productionNotes ? `<section class="ship"><h2>Production notes</h2>${escapeHtml(order.productionNotes).replaceAll('\n', '<br>')}</section>` : ''}
   <div class="footer"><span>Packed by: <span class="line"></span></span><span>Date: <span class="line"></span></span></div>
 </div></body></html>`
 }

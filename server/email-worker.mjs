@@ -222,6 +222,19 @@ function shipmentMessage(order) {
   }
 }
 
+function proofApprovalMessage(order) {
+  const customer = order.customer && typeof order.customer === 'object' ? order.customer : {}
+  const code = orderCode(order)
+  const firstName = clean(customer.name, 80).split(' ')[0]
+  const proofUrl = STORE_ORIGIN && order.proofToken ? `${STORE_ORIGIN}/proof/${order.proofToken}` : ''
+  const managerMessage = clean(order.proofMessage, 1000)
+  return {
+    subject: `Please approve your Inkcredible artwork • ${code}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,Helvetica,sans-serif"><div style="max-width:680px;margin:0 auto;padding:32px 18px"><div style="border-top:4px solid #c084fc;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700">INKCREDIBLE PENS</div><h1>Artwork ready for approval</h1><p>${firstName ? `Hey ${esc(firstName)}, please` : 'Please'} review the artwork for order <strong>${esc(code)}</strong>.</p>${managerMessage ? `<div style="background:#0d0d10;border:1px solid #2b2b31;border-radius:12px;padding:14px;margin:18px 0">${esc(managerMessage)}</div>` : ''}<p><a href="${esc(proofUrl)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:14px 20px;border-radius:999px">Review & approve artwork</a></p><p style="color:#aaaab3">Production will begin after you approve the proof.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\nPlease review and approve the artwork for order ${code}.${managerMessage ? `\n\n${managerMessage}` : ''}\n\nReview proof: ${proofUrl}\n\nProduction will begin after approval.`,
+  }
+}
+
 function quoteReceivedMessage(quote) {
   const code = clean(quote.displayCode || quote.id, 40)
   const firstName = clean(quote.customer?.name, 80).split(' ')[0]
@@ -392,6 +405,10 @@ async function runOnce() {
       await attempt(state, order, 'customer', String(order.customer?.email || '').trim(), customerMessage)
       if (order.status === 'shipped' && order.trackingNumber) {
         await attempt(state, order, 'shipment', String(order.customer?.email || '').trim(), shipmentMessage)
+      }
+      if (order.proofStatus === 'pending' && order.proofToken && STORE_ORIGIN) {
+        const revision = Math.max(1, Number(order.proofRevision) || 1)
+        await attempt(state, order, `proof_${revision}`, String(order.customer?.email || '').trim(), proofApprovalMessage)
       }
     }
 

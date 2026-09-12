@@ -96,6 +96,11 @@ if ! systemctl restart inkcredible.service; then
   systemctl restart inkcredible.service || true
   exit 1
 fi
+
+# Email templates and workflow triggers live in the repository too.
+if systemctl list-unit-files --type=service | grep -q '^inkcredible-email.service'; then
+  systemctl restart inkcredible-email.service
+fi
 rm -rf "$PREVIOUS_DIST"
 
 # Caddyfile is normally symlinked into the repo; validate before reloading it.

@@ -79,6 +79,20 @@ export interface PatchOrderBody {
   trackingNumber?: string | null
   shippedAt?: string | null
   archivedAt?: string | null
+  productionNotes?: string
+}
+
+export async function requestOrderProof(id: string, message: string): Promise<{ order: Order; proofUrl: string }> {
+  const res = await fetch(`/api/orders/${encodeURIComponent(id)}/proof`, {
+    method: 'POST',
+    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ message }),
+  })
+  const data = (await parseJson(res)) as { order?: Order; proofUrl?: string; error?: string } | null
+  if (!res.ok || !data?.order || !data.proofUrl) {
+    throw new OrdersApiError(data?.error || `proof_failed_${res.status}`, res.status, data?.error || 'proof_failed')
+  }
+  return { order: data.order, proofUrl: data.proofUrl }
 }
 
 export async function patchOrder(
