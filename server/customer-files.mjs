@@ -1,12 +1,13 @@
 /** Permanent paid-order artwork archive, intended for a dedicated LXC mount. */
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs'
 import multer from 'multer'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { requireAdmin } from './adminAuth.mjs'
 import { createRateLimiter, detectImageType } from './security.mjs'
 import { sanitizeSvgBuffer } from './svg-artwork.mjs'
+import { streamZip } from './zip-stream.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TEMP_ARTWORK_DIR = path.resolve(__dirname, '../uploads/custom')
@@ -130,6 +131,35 @@ function managerFileUrl(relativePath) {
   return `/api/admin/customer-files/file?path=${encodeURIComponent(relativePath)}`
 }
 
+function storageSummary(files, recycled) {
+  const fs = statfsSync(CUSTOMER_FILES_DIR)
+  const totalBytes = Number(fs.blocks) * Number(fs.bsize)
+  const freeBytes = Number(fs.bavail) * Number(fs.bsize)
+  const activeBytes = files.reduce((sum, file) => sum + file.size, 0)
+  const recycleBytes = recycled.reduce((sum, file) => sum + file.size, 0)
+  const oldest = files.length
+    ? files.reduce((current, file) => file.modifiedAt < current.modifiedAt ? file : current)
+    : null
+  return {
+    totalBytes,
+    freeBytes,
+    usedBytes: Math.max(0, totalBytes - freeBytes),
+    activeBytes,
+    recycleBytes,
+    activeFileCount: files.length,
+    recycleFileCount: recycled.length,
+    oldestFile: oldest ? { name: oldest.name, folder: oldest.folder, modifiedAt: oldest.modifiedAt } : null,
+  }
+}
+
+function resolveManagerFolder(relativeFolder) {
+  const normalized = String(relativeFolder || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+  const absolute = path.resolve(CUSTOMER_FILES_DIR, normalized)
+  if (!normalized || absolute === CUSTOMER_FILES_DIR || !absolute.startsWith(`${CUSTOMER_FILES_DIR}${path.sep}`)) return null
+  if (normalized.split('/').some((part) => !part || part.startsWith('.'))) return null
+  return { normalized, absolute }
+}
+
 function assertManualFile(relativePath) {
   const resolved = resolveManagerFile(relativePath)
   if (!resolved) throw Object.assign(new Error('invalid_path'), { code: 'invalid_path' })
@@ -217,13 +247,37 @@ export function mountCustomerFiles(app) {
 
   app.get('/api/admin/customer-files', requireAdmin, (_req, res) => {
     try {
-      const files = walkFiles(CUSTOMER_FILES_DIR)
-        .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
-        .map((file) => ({ ...file, url: managerFileUrl(file.path) }))
-      return res.json({ files, recycled: listRecycledFiles() })
+      const files = walkFiles(CUSTOMER_FILES_DIR).sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
+      const recycled = listRecycledFiles()
+      return res.json({
+        files: files.map((file) => ({ ...file, url: managerFileUrl(file.path) })),
+        recycled,
+        storage: storageSummary(files, recycled),
+      })
     } catch (error) {
       console.error('[customer-files] list failed', error)
       return res.status(500).json({ error: 'list_failed' })
+    }
+  })
+
+  app.get('/api/admin/customer-files/folder.zip', requireAdmin, (req, res) => {
+    const folder = resolveManagerFolder(req.query.folder)
+    if (!folder || !existsSync(folder.absolute) || !statSync(folder.absolute).isDirectory()) {
+      return res.status(404).json({ error: 'folder_not_found' })
+    }
+    const files = readdirSync(folder.absolute, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+      .map((entry) => {
+        const filePath = path.join(folder.absolute, entry.name)
+        return { path: filePath, name: entry.name, modifiedAt: statSync(filePath).mtime }
+      })
+    if (!files.length) return res.status(404).json({ error: 'folder_empty' })
+    try {
+      return streamZip(res, files, `${path.basename(folder.absolute)}.zip`)
+    } catch (error) {
+      console.error('[customer-files] zip failed', folder.normalized, error)
+      if (!res.headersSent) return res.status(500).json({ error: 'zip_failed' })
+      return res.end()
     }
   })
 

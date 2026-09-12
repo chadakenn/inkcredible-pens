@@ -23,15 +23,41 @@ export interface RecycledCustomerFile {
   deleteEligible: boolean
 }
 
+export interface CustomerStorageSummary {
+  totalBytes: number
+  freeBytes: number
+  usedBytes: number
+  activeBytes: number
+  recycleBytes: number
+  activeFileCount: number
+  recycleFileCount: number
+  oldestFile: { name: string; folder: string; modifiedAt: string } | null
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({})) as T & { error?: string }
   if (!response.ok) throw new Error(body.error || `request_failed_${response.status}`)
   return body
 }
 
-export async function fetchCustomerFiles(): Promise<{ files: CustomerFileRecord[]; recycled: RecycledCustomerFile[] }> {
+export async function fetchCustomerFiles(): Promise<{ files: CustomerFileRecord[]; recycled: RecycledCustomerFile[]; storage: CustomerStorageSummary }> {
   const response = await fetch('/api/admin/customer-files', { headers: adminAuthHeaders() })
-  return readJson<{ files: CustomerFileRecord[]; recycled: RecycledCustomerFile[] }>(response)
+  return readJson<{ files: CustomerFileRecord[]; recycled: RecycledCustomerFile[]; storage: CustomerStorageSummary }>(response)
+}
+
+export async function downloadCustomerFolder(folder: string): Promise<void> {
+  const url = `/api/admin/customer-files/folder.zip?folder=${encodeURIComponent(folder)}`
+  const response = await fetch(url, { headers: adminAuthHeaders() })
+  if (!response.ok) throw new Error((await response.json().catch(() => ({})) as { error?: string }).error || 'download_failed')
+  const blob = await response.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = `${folder.split('/').at(-1) || 'customer-job'}.zip`
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(objectUrl)
 }
 
 export async function updateCustomerFile(input: { path: string; customerName: string; jobName: string; fileName: string }): Promise<CustomerFileRecord> {

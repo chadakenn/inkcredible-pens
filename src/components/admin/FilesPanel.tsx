@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Download, FileImage, FolderOpen, Pencil, RefreshCw, RotateCcw, Search, Trash2, Upload, X } from 'lucide-react'
+import { Download, FileImage, FolderOpen, HardDrive, Pencil, RefreshCw, RotateCcw, Search, Trash2, Upload, X } from 'lucide-react'
 import {
+  downloadCustomerFolder,
   fetchCustomerFiles,
   permanentlyDeleteCustomerFile,
   recycleCustomerFile,
@@ -9,6 +10,7 @@ import {
   uploadCustomerFile,
   type CustomerFileRecord,
   type RecycledCustomerFile,
+  type CustomerStorageSummary,
 } from '../../lib/customerFilesApi'
 import { downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 
@@ -48,7 +50,8 @@ function manualLabels(file: CustomerFileRecord) {
 export default function FilesPanel() {
   const [files, setFiles] = useState<CustomerFileRecord[]>([])
   const [recycled, setRecycled] = useState<RecycledCustomerFile[]>([])
-  const [view, setView] = useState<'files' | 'recycle'>('files')
+  const [storage, setStorage] = useState<CustomerStorageSummary | null>(null)
+  const [view, setView] = useState<'folders' | 'files' | 'recycle'>('folders')
   const [query, setQuery] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [jobName, setJobName] = useState('')
@@ -64,7 +67,7 @@ export default function FilesPanel() {
     setBusy(true)
     setMessage(null)
     void fetchCustomerFiles()
-      .then((result) => { setFiles(result.files); setRecycled(result.recycled) })
+      .then((result) => { setFiles(result.files); setRecycled(result.recycled); setStorage(result.storage) })
       .catch((error) => setMessage(error instanceof Error ? error.message : 'Could not load files.'))
       .finally(() => setBusy(false))
   }
@@ -74,6 +77,18 @@ export default function FilesPanel() {
     const needle = query.trim().toLowerCase()
     return needle ? files.filter((file) => `${file.name} ${file.folder}`.toLowerCase().includes(needle)) : files
   }, [files, query])
+
+  const folders = useMemo(() => {
+    const grouped = new Map<string, { folder: string; files: CustomerFileRecord[]; bytes: number; newest: string }>()
+    for (const file of files) {
+      const current = grouped.get(file.folder) || { folder: file.folder, files: [], bytes: 0, newest: file.modifiedAt }
+      current.files.push(file)
+      current.bytes += file.size
+      if (file.modifiedAt > current.newest) current.newest = file.modifiedAt
+      grouped.set(file.folder, current)
+    }
+    return [...grouped.values()].sort((a, b) => b.newest.localeCompare(a.newest))
+  }, [files])
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -139,10 +154,32 @@ export default function FilesPanel() {
       {message && <p role="status" className="mt-3 rounded-xl border border-cyan/30 bg-cyan/10 px-4 py-3 text-sm font-bold text-cyan">{message}</p>}
     </div>
 
-    <div className="mt-6 grid grid-cols-2 rounded-2xl border border-line bg-ink p-1">
+    {storage && <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="rounded-2xl border border-line bg-ink-2 p-4"><HardDrive className="h-5 w-5 text-cyan" /><p className="mt-2 text-xs font-bold uppercase text-mute">Storage used</p><p className="font-display text-2xl text-cream">{formatBytes(storage.usedBytes)}</p><p className="text-xs text-mute">{formatBytes(storage.freeBytes)} free of {formatBytes(storage.totalBytes)}</p></div>
+      <div className="rounded-2xl border border-line bg-ink-2 p-4"><FileImage className="h-5 w-5 text-lime" /><p className="mt-2 text-xs font-bold uppercase text-mute">Active artwork</p><p className="font-display text-2xl text-cream">{storage.activeFileCount} files</p><p className="text-xs text-mute">{formatBytes(storage.activeBytes)}</p></div>
+      <div className="rounded-2xl border border-line bg-ink-2 p-4"><Trash2 className="h-5 w-5 text-pink" /><p className="mt-2 text-xs font-bold uppercase text-mute">Recycle bin</p><p className="font-display text-2xl text-cream">{storage.recycleFileCount} files</p><p className="text-xs text-mute">{formatBytes(storage.recycleBytes)}</p></div>
+      <div className="rounded-2xl border border-line bg-ink-2 p-4"><FolderOpen className="h-5 w-5 text-amber-300" /><p className="mt-2 text-xs font-bold uppercase text-mute">Oldest active file</p><p className="truncate font-bold text-cream">{storage.oldestFile?.name || 'None yet'}</p><p className="text-xs text-mute">{storage.oldestFile ? new Date(storage.oldestFile.modifiedAt).toLocaleDateString() : '—'}</p></div>
+    </div>}
+
+    <div className="mt-6 grid grid-cols-3 rounded-2xl border border-line bg-ink p-1">
+      <button type="button" onClick={() => setView('folders')} className={`min-h-12 rounded-xl font-extrabold ${view === 'folders' ? 'bg-lime text-ink' : 'text-mute'}`}>Folders ({folders.length})</button>
       <button type="button" onClick={() => setView('files')} className={`min-h-12 rounded-xl font-extrabold ${view === 'files' ? 'bg-cyan text-ink' : 'text-mute'}`}>Files ({files.length})</button>
       <button type="button" onClick={() => setView('recycle')} className={`min-h-12 rounded-xl font-extrabold ${view === 'recycle' ? 'bg-pink text-white' : 'text-mute'}`}>Recycle bin ({recycled.length})</button>
     </div>
+
+    {view === 'folders' && <div className="mt-4 grid gap-4 md:grid-cols-2">
+      {folders.map((folder) => {
+        const label = folder.folder.split('/').at(-1)?.replace('_MANUAL-', ' · ').replaceAll('-', ' ') || folder.folder
+        return <article key={folder.folder} className="rounded-2xl border border-line bg-ink-2 p-5">
+          <div className="flex items-start gap-3"><FolderOpen className="mt-1 h-6 w-6 shrink-0 text-lime" /><div className="min-w-0"><h3 className="break-words font-display text-xl text-cream">{label}</h3><p className="mt-1 break-all text-xs text-cyan">{folder.folder}</p><p className="mt-2 text-sm text-mute">{folder.files.length} {folder.files.length === 1 ? 'file' : 'files'} · {formatBytes(folder.bytes)}</p></div></div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" onClick={() => { setQuery(folder.folder); setView('files') }} className="min-h-11 rounded-xl border border-line px-3 font-bold text-cream">Open folder</button>
+            <button type="button" onClick={() => void downloadCustomerFolder(folder.folder).catch((error) => setMessage(error instanceof Error ? error.message : 'ZIP download failed.'))} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-cyan px-3 font-extrabold text-ink"><Download className="h-4 w-4" /> Download job ZIP</button>
+          </div>
+        </article>
+      })}
+      {!busy && folders.length === 0 && <p className="rounded-2xl border border-dashed border-line p-10 text-center text-mute md:col-span-2">No customer folders yet.</p>}
+    </div>}
 
     {view === 'files' && <>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row">
