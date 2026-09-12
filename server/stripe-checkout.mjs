@@ -21,7 +21,6 @@ import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { activityMiddleware, mountActivity } from './activity.mjs'
 import { mountStoreSettings } from './store-settings.mjs'
-import { mountProductImageMigration } from './product-image-migration.mjs'
 import { priceCart } from './pricing.mjs'
 import {
   attachStripeSession,
@@ -181,7 +180,6 @@ mountOrders(app)
 mountProofs(app)
 mountTracking(app)
 mountCatalog(app)
-mountProductImageMigration(app)
 mountScents(app)
 mountListingsMcp(app)
 mountQuotes(app, { createPaymentSession: createQuotePaymentSession })

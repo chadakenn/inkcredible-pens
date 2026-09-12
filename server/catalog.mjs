@@ -23,6 +23,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const CATALOG_DIR = path.resolve(__dirname, "../data/catalog")
 export const CATALOG_FILE = path.join(CATALOG_DIR, "products.json")
 export const CATALOG_SEED_FILE = path.join(__dirname, "catalog-seed.json")
+export const SAFE_RESET_FILE = path.join(CATALOG_DIR, "products-reset.json")
 
 const CATEGORIES = new Set(["Pens", "Stickers", "Car Freshies", "Canvas", "Custom"])
 const ART_TYPES = new Set([
@@ -129,6 +130,27 @@ function ensureCatalogFile() {
     console.error("[catalog] seed copy failed, writing empty", err)
     writeAtomic(seed)
   }
+}
+
+function hasExternalProductImages(products) {
+  return products.some((product) => /^https?:\/\//i.test(String(product?.imageUrl || "")))
+}
+
+function ensureSafeResetFile() {
+  if (existsSync(SAFE_RESET_FILE)) return
+  const products = readProducts()
+  if (products.length && !hasExternalProductImages(products)) {
+    writeJsonAtomic(SAFE_RESET_FILE, products, { keepBackups: 3 })
+    console.log(`[catalog] saved local-image reset point → ${SAFE_RESET_FILE}`)
+  }
+}
+
+function loadSafeResetProducts() {
+  if (!existsSync(SAFE_RESET_FILE)) return null
+  const data = readJsonFile(SAFE_RESET_FILE)
+  const products = Array.isArray(data) ? data : data?.products
+  if (!Array.isArray(products) || hasExternalProductImages(products)) return null
+  return products.map(applyProductDefaults)
 }
 
 export function readProducts() {
@@ -262,6 +284,7 @@ export function validateProductShape(body, { partial = false } = {}) {
  */
 export function mountCatalog(app) {
   ensureCatalogFile()
+  ensureSafeResetFile()
 
   app.get("/api/catalog", (_req, res) => {
     try {
@@ -408,8 +431,11 @@ export function mountCatalog(app) {
   })
 
   app.post("/api/catalog/reset", requireAdmin, (_req, res) => {
-    const seed = loadSeedProducts()
-    writeAtomic(seed)
-    return res.json({ products: seed, reset: true, count: seed.length })
+    const safeReset = loadSafeResetProducts()
+    if (!safeReset) {
+      return res.status(409).json({ error: "safe_reset_unavailable" })
+    }
+    writeAtomic(safeReset)
+    return res.json({ products: safeReset, reset: true, count: safeReset.length })
   })
 }

@@ -54,7 +54,6 @@ import QuotesPanel from '../components/admin/QuotesPanel'
 import FilesPanel from '../components/admin/FilesPanel'
 import ActivityPanel from '../components/admin/ActivityPanel'
 import ProductPhotoField from '../components/admin/ProductPhotoField'
-import ImageMigrationPanel from '../components/admin/ImageMigrationPanel'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 const CATEGORIES: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
@@ -732,7 +731,6 @@ export default function Admin() {
 
       {!showAccounts && tab === 'products' && (
         <div>
-          <ImageMigrationPanel onCatalogChanged={() => { void hydrateCatalog(true) }} />
           {justAdded && (
             <p className="mb-4 rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm font-bold text-lime">
               “{justAdded}” is in the shop now. Nice!
@@ -770,14 +768,14 @@ export default function Admin() {
               className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-pink/30 bg-ink-2 px-5 text-sm font-bold text-mute transition hover:border-pink/60 hover:text-cream"
             >
               <RotateCcw className="h-5 w-5 text-cyan" />
-              Restore original products
+              Restore saved catalog
             </button>
           </div>
 
           {confirmReset && (
             <div className="mt-4 rounded-2xl border border-pink/40 bg-ink-2 p-4">
               <p className="text-base font-bold text-cream">
-                Are you sure? This puts the original product list back and removes anything you added.
+                Are you sure? This restores the safe local-photo catalog saved after the image migration and removes products added since then.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <button
