@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Archive, CheckCircle2, ChevronDown, ChevronUp, Download, ExternalLink, FileDown, Printer, RefreshCw, RotateCcw, Save, Search, Send, ShoppingCart, Trash2, Truck, X } from 'lucide-react'
 import { formatBannerCartMeta } from '../../data/banners'
@@ -124,6 +125,7 @@ function AdminArtThumb({
 }) {
   const [src, setSrc] = useState(preview || '')
   const [large, setLarge] = useState(false)
+  const [hoverPreview, setHoverPreview] = useState<{ top: number; left: number } | null>(null)
   useEffect(() => {
     let revoked: string | null = null
     let cancelled = false
@@ -152,7 +154,28 @@ function AdminArtThumb({
   if (!src) return null
   return (
     <>
-    <button type="button" onClick={() => setLarge(true)} title="Open large artwork preview" className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1 transition hover:border-cyan">
+    <button
+      type="button"
+      onClick={() => { setHoverPreview(null); setLarge(true) }}
+      onMouseEnter={(event) => {
+        const box = event.currentTarget.getBoundingClientRect()
+        const width = 340
+        const left = Math.min(window.innerWidth - width - 16, Math.max(16, box.right + 12))
+        const top = Math.min(window.innerHeight - 380, Math.max(16, box.top - 90))
+        setHoverPreview({ top, left })
+      }}
+      onMouseLeave={() => setHoverPreview(null)}
+      onFocus={(event) => {
+        const box = event.currentTarget.getBoundingClientRect()
+        setHoverPreview({
+          top: Math.min(window.innerHeight - 380, Math.max(16, box.top - 90)),
+          left: Math.min(window.innerWidth - 356, Math.max(16, box.right + 12)),
+        })
+      }}
+      onBlur={() => setHoverPreview(null)}
+      title="Hover for preview · click to open full screen"
+      className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1 transition hover:border-cyan hover:shadow-[0_0_18px_rgba(34,211,238,0.35)]"
+    >
       <img
         src={src}
         alt="Customer artwork preview"
@@ -160,6 +183,16 @@ function AdminArtThumb({
         onError={() => setSrc('')}
       />
     </button>
+    {hoverPreview && createPortal(
+      <div
+        style={{ top: hoverPreview.top, left: hoverPreview.left }}
+        className="pointer-events-none fixed z-[110] hidden w-[340px] rounded-2xl border border-cyan/50 bg-ink-2 p-3 shadow-2xl shadow-black/70 md:block"
+      >
+        <img src={src} alt="Larger customer artwork preview" className="max-h-[340px] w-full rounded-xl bg-white object-contain" />
+        <p className="mt-2 text-center text-xs font-bold text-cyan">Click the thumbnail for full screen</p>
+      </div>,
+      document.body,
+    )}
     {large && <div role="dialog" aria-modal="true" aria-label="Artwork preview" onClick={() => setLarge(false)} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4">
       <button type="button" onClick={() => setLarge(false)} className="absolute right-5 top-5 flex h-12 w-12 items-center justify-center rounded-full bg-ink-2 text-cream"><X className="h-6 w-6" /></button>
       <img src={src} alt="Large customer artwork preview" onClick={(event) => event.stopPropagation()} className="max-h-[90vh] max-w-[95vw] rounded-2xl bg-white object-contain" />
