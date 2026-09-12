@@ -245,10 +245,14 @@ function quotePaymentMessage(quote) {
   const code = clean(quote.displayCode || quote.id, 40)
   const price = Number(quote.finalPriceCents || 0) / 100
   const shipping = Number(quote.shippingCents || 0) / 100
+  const turnaround = clean(quote.turnaround, 120)
+  const managerMessage = clean(quote.managerMessage, 1000)
+  const detailsHtml = `${turnaround ? `<p><strong>Estimated turnaround:</strong> ${esc(turnaround)}</p>` : ''}${managerMessage ? `<div style="background:#0d0d10;border:1px solid #2b2b31;border-radius:12px;padding:14px;margin:18px 0"><strong>Message from Inkcredible:</strong><br>${esc(managerMessage)}</div>` : ''}`
+  const detailsText = `${turnaround ? `\nEstimated turnaround: ${turnaround}` : ''}${managerMessage ? `\nMessage from Inkcredible: ${managerMessage}` : ''}`
   return {
     subject: `Your Inkcredible custom quote is ready • ${code}`,
-    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,sans-serif"><div style="max-width:680px;margin:auto;padding:32px 18px"><div style="border-top:4px solid #c9ff37;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700">INKCREDIBLE PENS</div><h1>Your quote is ready</h1><p><strong>${esc(code)}</strong></p><p>Final project price: <strong style="color:#c9ff37">${money(price)}</strong><br>Shipping: ${shipping ? money(shipping) : 'FREE'}</p><p><a href="${esc(quote.paymentUrl)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:14px 20px;border-radius:999px">Review & pay securely</a></p><p style="color:#aaaab3">You’ll confirm your shipping address on Stripe’s secure checkout page.</p></div></div></body></html>`,
-    text: `INKCREDIBLE PENS\n\nYour quote ${code} is ready.\nFinal project price: ${money(price)}\nShipping: ${shipping ? money(shipping) : 'FREE'}\n\nReview and pay securely: ${quote.paymentUrl}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,sans-serif"><div style="max-width:680px;margin:auto;padding:32px 18px"><div style="border-top:4px solid #c9ff37;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700">INKCREDIBLE PENS</div><h1>Your quote is ready</h1><p><strong>${esc(code)}</strong></p><p>Final project price: <strong style="color:#c9ff37">${money(price)}</strong><br>Shipping: ${shipping ? money(shipping) : 'FREE'}</p>${detailsHtml}<p><a href="${esc(quote.paymentUrl)}" style="display:inline-block;background:#c9ff37;color:#09090b;text-decoration:none;font-weight:700;padding:14px 20px;border-radius:999px">Review & pay securely</a></p><p style="color:#aaaab3">You’ll confirm your shipping address on Stripe’s secure checkout page.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\nYour quote ${code} is ready.\nFinal project price: ${money(price)}\nShipping: ${shipping ? money(shipping) : 'FREE'}${detailsText}\n\nReview and pay securely: ${quote.paymentUrl}`,
   }
 }
 
@@ -397,7 +401,9 @@ async function runOnce() {
         await attempt(state, quote, 'quote_received', String(quote.customer?.email || '').trim(), quoteReceivedMessage)
       }
       if (quote.status === 'payment_sent' && quote.paymentUrl) {
-        await attempt(state, quote, 'quote_payment', String(quote.customer?.email || '').trim(), quotePaymentMessage)
+        const revision = Math.max(1, Number(quote.paymentRevision) || 1)
+        const kind = revision === 1 ? 'quote_payment' : `quote_payment_${revision}`
+        await attempt(state, quote, kind, String(quote.customer?.email || '').trim(), quotePaymentMessage)
       }
     }
   } catch (err) {

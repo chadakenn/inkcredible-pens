@@ -435,9 +435,11 @@ function fulfillCheckoutSession(session) {
   return order
 }
 
-async function createQuotePaymentSession(quote, finalPriceCents) {
+async function createQuotePaymentSession(quote, finalPriceCents, requestedShippingCents) {
   if (!secret) throw new Error('missing_stripe_key')
-  const shippingCents = quoteShippingCents(finalPriceCents)
+  const shippingCents = Number.isInteger(requestedShippingCents)
+    ? requestedShippingCents
+    : quoteShippingCents(finalPriceCents)
   const checkoutId = newCheckoutId()
   const quantity = quote.items.reduce((sum, item) => sum + Math.max(1, Number(item.qty) || 1), 0)
   const estimatedTotal = quote.items.reduce((sum, item) => sum + Math.max(0, Number(item.estimate) || 0) * Math.max(1, Number(item.qty) || 1), 0)
@@ -456,6 +458,14 @@ async function createQuotePaymentSession(quote, finalPriceCents) {
     orderItems, subtotalCents: finalPriceCents, shippingCents, totalCents: finalPriceCents + shippingCents,
   })
   const stripe = new Stripe(secret)
+  if (quote.stripeSessionId) {
+    try {
+      const previous = await stripe.checkout.sessions.retrieve(quote.stripeSessionId)
+      if (previous.status === 'open') await stripe.checkout.sessions.expire(quote.stripeSessionId)
+    } catch (error) {
+      console.warn('[quotes] previous Stripe session could not be expired', quote.displayCode, error instanceof Error ? error.message : error)
+    }
+  }
   const session = await stripe.checkout.sessions.create({
     mode: 'payment', customer_email: quote.customer.email, client_reference_id: checkoutId,
     line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: finalPriceCents, product_data: { name: `Inkcredible custom project ${quote.displayCode}`, description: summary } } }],

@@ -14,6 +14,9 @@ export interface QuoteRequest {
   paymentUrl?: string
   paymentSentAt?: string
   orderId?: string
+  managerMessage?: string
+  turnaround?: string
+  paymentRevision?: number
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -28,9 +31,9 @@ export async function fetchQuotes(): Promise<QuoteRequest[]> {
   return data.quotes
 }
 
-export async function sendQuotePayment(id: string, finalPrice: number): Promise<QuoteRequest> {
+export async function sendQuotePayment(id: string, input: { finalPrice: number; shipping: number; managerMessage: string; turnaround: string }): Promise<QuoteRequest> {
   const data = await request<{ quote: QuoteRequest }>(`/api/admin/quotes/${encodeURIComponent(id)}/send-payment`, {
-    method: 'POST', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ finalPrice }),
+    method: 'POST', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input),
   })
   return data.quote
 }

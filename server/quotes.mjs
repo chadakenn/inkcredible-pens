@@ -75,12 +75,18 @@ export function mountQuotes(app, { createPaymentSession }) {
     const index = quotes.findIndex((quote) => quote.id === String(req.params.id || ''))
     if (index < 0) return res.status(404).json({ error: 'not_found' })
     if (quotes[index].status === 'paid') return res.status(409).json({ error: 'already_paid' })
-    if (quotes[index].status === 'payment_sent') return res.status(409).json({ error: 'payment_already_sent' })
     const finalPriceCents = Math.round(Number(req.body?.finalPrice) * 100)
     if (!Number.isInteger(finalPriceCents) || finalPriceCents < 100 || finalPriceCents > 1_000_000_00) return res.status(400).json({ error: 'invalid_final_price' })
+    const requestedShippingCents = req.body?.shipping == null || req.body?.shipping === ''
+      ? quoteShippingCents(finalPriceCents)
+      : Math.round(Number(req.body.shipping) * 100)
+    if (!Number.isInteger(requestedShippingCents) || requestedShippingCents < 0 || requestedShippingCents > 50_000) return res.status(400).json({ error: 'invalid_shipping' })
+    const managerMessage = clean(req.body?.managerMessage, 1000)
+    const turnaround = clean(req.body?.turnaround, 120)
     try {
-      const payment = await createPaymentSession(quotes[index], finalPriceCents)
-      quotes[index] = { ...quotes[index], status: 'payment_sent', finalPriceCents, shippingCents: payment.shippingCents, paymentUrl: payment.url, stripeSessionId: payment.sessionId, paymentSentAt: new Date().toISOString() }
+      const payment = await createPaymentSession(quotes[index], finalPriceCents, requestedShippingCents)
+      const paymentRevision = Math.max(0, Number(quotes[index].paymentRevision) || 0) + 1
+      quotes[index] = { ...quotes[index], status: 'payment_sent', finalPriceCents, shippingCents: payment.shippingCents, managerMessage, turnaround, paymentRevision, paymentUrl: payment.url, stripeSessionId: payment.sessionId, paymentSentAt: new Date().toISOString() }
       writeQuotes(quotes)
       return res.json({ quote: quotes[index] })
     } catch (error) {
