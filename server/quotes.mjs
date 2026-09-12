@@ -70,11 +70,27 @@ export function mountQuotes(app, { createPaymentSession }) {
     } catch (error) { return res.status(400).json({ error: error?.code || 'quote_failed' }) }
   })
   app.get('/api/admin/quotes', requireAdmin, (_req, res) => res.json({ quotes: listQuotes() }))
+  app.patch('/api/admin/quotes/:id', requireAdmin, (req, res) => {
+    const quotes = readQuotes()
+    const index = quotes.findIndex((quote) => quote.id === String(req.params.id || ''))
+    if (index < 0) return res.status(404).json({ error: 'not_found' })
+    if (quotes[index].status === 'paid') return res.status(409).json({ error: 'already_paid' })
+    const status = String(req.body?.status || '')
+    if (status !== 'requested' && status !== 'cancelled') return res.status(400).json({ error: 'invalid_status' })
+    quotes[index] = {
+      ...quotes[index],
+      status,
+      ...(status === 'cancelled' ? { cancelledAt: new Date().toISOString() } : { cancelledAt: undefined }),
+    }
+    writeQuotes(quotes)
+    return res.json({ quote: quotes[index] })
+  })
   app.post('/api/admin/quotes/:id/send-payment', requireAdmin, async (req, res) => {
     const quotes = readQuotes()
     const index = quotes.findIndex((quote) => quote.id === String(req.params.id || ''))
     if (index < 0) return res.status(404).json({ error: 'not_found' })
     if (quotes[index].status === 'paid') return res.status(409).json({ error: 'already_paid' })
+    if (quotes[index].status === 'cancelled') return res.status(409).json({ error: 'quote_cancelled' })
     const finalPriceCents = Math.round(Number(req.body?.finalPrice) * 100)
     if (!Number.isInteger(finalPriceCents) || finalPriceCents < 100 || finalPriceCents > 1_000_000_00) return res.status(400).json({ error: 'invalid_final_price' })
     const requestedShippingCents = req.body?.shipping == null || req.body?.shipping === ''

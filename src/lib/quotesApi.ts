@@ -5,7 +5,7 @@ export interface QuoteRequest {
   id: string
   displayCode: string
   createdAt: string
-  status: 'requested' | 'payment_sent' | 'paid'
+  status: 'requested' | 'payment_sent' | 'paid' | 'cancelled'
   customer: { email: string; name: string; address?: string; city?: string; state?: string; zip?: string }
   items: { name: string; qty: number; estimate: number; custom?: CustomLogoMeta }[]
   estimateTotal: number
@@ -17,6 +17,7 @@ export interface QuoteRequest {
   managerMessage?: string
   turnaround?: string
   paymentRevision?: number
+  cancelledAt?: string
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -34,6 +35,13 @@ export async function fetchQuotes(): Promise<QuoteRequest[]> {
 export async function sendQuotePayment(id: string, input: { finalPrice: number; shipping: number; managerMessage: string; turnaround: string }): Promise<QuoteRequest> {
   const data = await request<{ quote: QuoteRequest }>(`/api/admin/quotes/${encodeURIComponent(id)}/send-payment`, {
     method: 'POST', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(input),
+  })
+  return data.quote
+}
+
+export async function setQuoteStatus(id: string, status: 'requested' | 'cancelled'): Promise<QuoteRequest> {
+  const data = await request<{ quote: QuoteRequest }>(`/api/admin/quotes/${encodeURIComponent(id)}`, {
+    method: 'PATCH', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ status }),
   })
   return data.quote
 }

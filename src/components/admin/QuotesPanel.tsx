@@ -1,158 +1,57 @@
-import { useEffect, useState } from 'react'
-import { Download, Mail, RefreshCw } from 'lucide-react'
-import { fetchQuotes, sendQuotePayment, type QuoteRequest } from '../../lib/quotesApi'
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Check, ChevronDown, ChevronUp, Clock3, Download, Eye, FileText, Mail, RefreshCw, RotateCcw, Search, Trash2, X } from 'lucide-react'
+import { fetchQuotes, sendQuotePayment, setQuoteStatus, type QuoteRequest } from '../../lib/quotesApi'
 import { downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 
-const money = (value: number) => value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+type Filter = 'all' | 'requested' | 'payment_sent' | 'paid' | 'expired' | 'cancelled'
+const labels: Record<Exclude<Filter, 'all'>, string> = { requested: 'Needs pricing', payment_sent: 'Payment sent', paid: 'Paid', expired: 'Link expired', cancelled: 'Cancelled' }
+function stateOf(q: QuoteRequest): Exclude<Filter, 'all'> {
+  if (q.status === 'cancelled' || q.status === 'paid') return q.status
+  return q.status === 'payment_sent' && q.paymentSentAt && Date.now() - Date.parse(q.paymentSentAt) > 86400000 ? 'expired' : q.status
+}
 
-function ArtworkPreview({ url, fileName }: { url: string; fileName: string }) {
+function Art({ url, name }: { url: string; name: string }) {
   const [src, setSrc] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    let active = true
-    let objectUrl: string | null = null
-    setFailed(false)
-    void fetchAdminArtworkObjectUrl(url)
-      .then((next) => {
-        objectUrl = next
-        if (active) setSrc(next)
-        else URL.revokeObjectURL(next)
-      })
-      .catch(() => { if (active) setFailed(true) })
-    return () => {
-      active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [url])
+  const [large, setLarge] = useState(false)
+  const [hover, setHover] = useState<{ top: number; left: number } | null>(null)
+  useEffect(() => { let alive = true; let blob: string | null = null; void fetchAdminArtworkObjectUrl(url).then((v) => { blob = v; if (alive) setSrc(v); else URL.revokeObjectURL(v) }).catch(() => setSrc(null)); return () => { alive = false; if (blob) URL.revokeObjectURL(blob) } }, [url])
+  return <><button type="button" disabled={!src} onClick={() => { setHover(null); setLarge(true) }} onMouseLeave={() => setHover(null)} onMouseEnter={(e) => { if (!src) return; const b = e.currentTarget.getBoundingClientRect(); setHover({ top: Math.min(innerHeight - 380, Math.max(16, b.top - 80)), left: Math.min(innerWidth - 356, Math.max(16, b.right + 12)) }) }} className="group relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-line bg-ink-2 hover:border-cyan">{src ? <img src={src} alt={name} className="h-full w-full object-contain" /> : <FileText className="h-7 w-7 text-mute" />}{src && <span className="absolute inset-0 hidden items-center justify-center bg-black/55 group-hover:flex"><Eye className="h-5 w-5" /></span>}</button>
+  {hover && src && createPortal(<div style={hover} className="pointer-events-none fixed z-[110] hidden w-[340px] rounded-xl border border-cyan/50 bg-ink-2 p-3 shadow-2xl md:block"><img src={src} alt="Artwork preview" className="max-h-[340px] w-full rounded-lg bg-white object-contain" /><p className="mt-2 text-center text-xs font-bold text-cyan">Click for full screen</p></div>, document.body)}
+  {large && src && createPortal(<div onClick={() => setLarge(false)} className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-4"><button className="absolute right-5 top-5 flex h-12 w-12 items-center justify-center rounded-full bg-ink-2 text-cream"><X /></button><img onClick={(e) => e.stopPropagation()} src={src} alt={name} className="max-h-[90vh] max-w-[95vw] rounded-xl bg-white object-contain" /></div>, document.body)}</>
+}
 
-  if (failed) return <p className="mt-3 rounded-xl border border-line bg-ink-2 p-4 text-sm text-mute">Preview unavailable for {fileName}. Download the original to review it.</p>
-  return <div className="mt-3 flex min-h-48 items-center justify-center overflow-hidden rounded-2xl border border-line bg-[linear-gradient(45deg,#202026_25%,transparent_25%),linear-gradient(-45deg,#202026_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#202026_75%),linear-gradient(-45deg,transparent_75%,#202026_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0px] p-3">
-    {src ? <img src={src} alt={`Customer artwork: ${fileName}`} className="max-h-96 w-full object-contain" /> : <p className="text-sm font-bold text-mute">Loading artwork preview…</p>}
-  </div>
+function Timeline({ state }: { state: Exclude<Filter, 'all'> }) {
+  const stopped = state === 'cancelled'; const step = state === 'paid' ? 3 : state === 'payment_sent' || state === 'expired' ? 2 : 1
+  return <div className="grid grid-cols-3 gap-2">{['Requested', 'Payment sent', 'Paid'].map((label, i) => <div key={label} className={`rounded-lg border p-2 text-center text-[11px] font-extrabold uppercase ${!stopped && step >= i + 1 ? 'border-cyan/50 bg-cyan/10 text-cyan' : 'border-line bg-ink text-mute'}`}>{!stopped && step > i + 1 ? <Check className="mx-auto mb-1 h-4 w-4" /> : <b className="mb-1 block text-base">{i + 1}</b>}{label}</div>)}</div>
 }
 
 export default function QuotesPanel() {
-  const [quotes, setQuotes] = useState<QuoteRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [prices, setPrices] = useState<Record<string, string>>({})
-  const [shipping, setShipping] = useState<Record<string, string>>({})
-  const [messages, setMessages] = useState<Record<string, string>>({})
-  const [turnarounds, setTurnarounds] = useState<Record<string, string>>({})
-  const [busy, setBusy] = useState<string | null>(null)
-  const [confirmResend, setConfirmResend] = useState<string | null>(null)
-
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try { setQuotes(await fetchQuotes()) }
-    catch (err) { setError(err instanceof Error ? err.message : 'Could not load quotes') }
-    finally { setLoading(false) }
-  }
+  const [quotes, setQuotes] = useState<QuoteRequest[]>([]), [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null), [filter, setFilter] = useState<Filter>('all'), [query, setQuery] = useState(''), [expanded, setExpanded] = useState<string | null>(null)
+  const [prices, setPrices] = useState<Record<string, string>>({}), [shipping, setShipping] = useState<Record<string, string>>({}), [messages, setMessages] = useState<Record<string, string>>({}), [turnarounds, setTurnarounds] = useState<Record<string, string>>({})
+  const [busy, setBusy] = useState<string | null>(null), [confirmResend, setConfirmResend] = useState<string | null>(null)
+  const load = async () => { setLoading(true); setError(null); try { setQuotes(await fetchQuotes()) } catch (e) { setError(e instanceof Error ? e.message : 'Could not load quotes') } finally { setLoading(false) } }
   useEffect(() => { void load() }, [])
-
-  const finalPriceValue = (quote: QuoteRequest) =>
-    prices[quote.id] ?? (quote.finalPriceCents ? String(quote.finalPriceCents / 100) : '')
-  const shippingValue = (quote: QuoteRequest) => {
-    if (shipping[quote.id] != null) return shipping[quote.id]
-    if (quote.shippingCents != null) return String(quote.shippingCents / 100)
-    return Number(finalPriceValue(quote)) > 60 ? '0' : '8'
-  }
-  const messageValue = (quote: QuoteRequest) => messages[quote.id] ?? quote.managerMessage ?? ''
-  const turnaroundValue = (quote: QuoteRequest) => turnarounds[quote.id] ?? quote.turnaround ?? ''
-
-  const send = (quote: QuoteRequest) => {
-    const finalPrice = Number(finalPriceValue(quote))
-    const shippingPrice = Number(shippingValue(quote))
-    setBusy(quote.id)
-    setError(null)
-    void sendQuotePayment(quote.id, {
-      finalPrice,
-      shipping: shippingPrice,
-      managerMessage: messageValue(quote),
-      turnaround: turnaroundValue(quote),
-    })
-      .then((updated) => {
-        setQuotes((current) => current.map((item) => item.id === quote.id ? updated : item))
-        setConfirmResend(null)
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not queue payment email'))
-      .finally(() => setBusy(null))
-  }
-
-  return <div>
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h2 className="font-display text-3xl text-cream">Custom Quotes</h2>
-        <p className="mt-1 text-sm text-mute">Approve pricing, include a message, and email secure Stripe checkout.</p>
-      </div>
-      <button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink-2 px-4 text-sm font-extrabold text-cream">
-        <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-      </button>
-    </div>
-
-    {error && <p className="mt-4 rounded-xl border border-pink/40 bg-pink/10 p-3 text-sm font-bold text-pink">{error}</p>}
-    <ul className="mt-5 space-y-4">
-      {!loading && !quotes.length && <li className="rounded-3xl border border-dashed border-line bg-ink-2 p-10 text-center text-mute">No quote requests yet.</li>}
-      {quotes.map((quote) => {
-        const canSend = Number(finalPriceValue(quote)) > 0 && Number(shippingValue(quote)) >= 0
-        return <li key={quote.id} className="rounded-3xl border border-line bg-ink-2 p-5 sm:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-extrabold uppercase ${quote.status === 'paid' ? 'bg-lime/15 text-lime' : quote.status === 'payment_sent' ? 'bg-cyan/15 text-cyan' : 'bg-lavender/15 text-lavender'}`}>
-                {quote.status === 'requested' ? 'Needs approval' : quote.status === 'payment_sent' ? `Payment email sent${quote.paymentRevision && quote.paymentRevision > 1 ? ` · revision ${quote.paymentRevision}` : ''}` : 'Paid'}
-              </span>
-              <h3 className="mt-2 font-display text-2xl text-cream">{quote.customer.name}</h3>
-              <p className="text-sm text-mute">{quote.customer.email} · {quote.displayCode}</p>
-            </div>
-            <p className="text-right text-sm text-mute">Estimate shown<br/><strong className="font-display text-xl text-cream">{money(quote.estimateTotal)}</strong></p>
-          </div>
-
-          <ul className="mt-4 space-y-2">
-            {quote.items.map((item, index) => <li key={index} className="rounded-xl bg-ink p-3">
-              <strong className="text-cream">{item.name} × {item.qty}</strong>
-              {item.custom?.bannerNotes && <p className="text-xs text-mute">Notes: {item.custom.bannerNotes}</p>}
-              {item.custom?.canvasNotes && <p className="text-xs text-mute">Notes: {item.custom.canvasNotes}</p>}
-              {item.custom?.artworkUrl && <>
-                <ArtworkPreview url={item.custom.artworkUrl} fileName={item.custom.artworkFileName || item.custom.fileName || 'artwork'} />
-                <button type="button" onClick={() => void downloadAdminArtwork(item.custom!.artworkUrl!, item.custom?.artworkFileName || item.custom?.fileName || 'artwork')} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-cyan px-4 text-sm font-extrabold text-ink"><Download className="h-4 w-4" /> Download original artwork</button>
-              </>}
-            </li>)}
-          </ul>
-
-          {quote.status !== 'paid' && <div className="mt-4 rounded-2xl border border-line bg-ink p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label>
-                <span className="mb-1 block text-xs font-extrabold uppercase text-mute">Final project price</span>
-                <span className="flex items-center rounded-xl border border-line bg-ink-2 px-3 focus-within:border-cyan"><span className="font-bold text-lime">$</span><input type="number" min="1" step="0.01" value={finalPriceValue(quote)} onChange={(event) => setPrices((current) => ({ ...current, [quote.id]: event.target.value }))} className="min-h-12 min-w-0 flex-1 bg-transparent px-2 text-cream outline-none" /></span>
-              </label>
-              <label>
-                <span className="mb-1 block text-xs font-extrabold uppercase text-mute">Shipping</span>
-                <span className="flex items-center rounded-xl border border-line bg-ink-2 px-3 focus-within:border-cyan"><span className="font-bold text-lime">$</span><input type="number" min="0" max="500" step="0.01" value={shippingValue(quote)} onChange={(event) => setShipping((current) => ({ ...current, [quote.id]: event.target.value }))} className="min-h-12 min-w-0 flex-1 bg-transparent px-2 text-cream outline-none" /></span>
-              </label>
-              <label>
-                <span className="mb-1 block text-xs font-extrabold uppercase text-mute">Estimated turnaround</span>
-                <input value={turnaroundValue(quote)} onChange={(event) => setTurnarounds((current) => ({ ...current, [quote.id]: event.target.value }))} placeholder="Example: 7–10 business days" maxLength={120} className="min-h-12 w-full rounded-xl border border-line bg-ink-2 px-3 text-cream outline-none focus:border-cyan" />
-              </label>
-              <label>
-                <span className="mb-1 block text-xs font-extrabold uppercase text-mute">Message to customer</span>
-                <textarea value={messageValue(quote)} onChange={(event) => setMessages((current) => ({ ...current, [quote.id]: event.target.value }))} placeholder="What is included, artwork notes, or next steps…" maxLength={1000} rows={3} className="w-full rounded-xl border border-line bg-ink-2 p-3 text-cream outline-none focus:border-cyan" />
-              </label>
-            </div>
-            <p className="mt-3 text-xs text-mute">The customer pays exactly the final price plus the shipping entered here.</p>
-
-            {quote.status === 'payment_sent' && confirmResend !== quote.id
-              ? <button type="button" disabled={busy === quote.id || !canSend} onClick={() => setConfirmResend(quote.id)} className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-xl border border-cyan px-4 font-extrabold text-cyan disabled:opacity-40"><Mail className="h-4 w-4" /> Revise and send a new payment link</button>
-              : <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" disabled={busy === quote.id || !canSend} onClick={() => send(quote)} className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-lime px-4 font-extrabold text-ink disabled:opacity-40"><Mail className="h-4 w-4" /> {busy === quote.id ? 'Creating secure checkout…' : quote.status === 'payment_sent' ? 'Confirm revision & email' : 'Approve & email payment link'}</button>
-                  {quote.status === 'payment_sent' && <button type="button" onClick={() => setConfirmResend(null)} className="min-h-12 rounded-xl border border-line px-4 font-bold text-cream">Cancel</button>}
-                </div>}
-          </div>}
-
-          {quote.status === 'payment_sent' && <div className="mt-4 rounded-2xl border border-cyan/40 bg-cyan/10 p-4 text-sm text-cream"><strong>Secure payment link emailed.</strong> Final price: {money((quote.finalPriceCents || 0) / 100)} · Shipping: {quote.shippingCents ? money(quote.shippingCents / 100) : 'FREE'}{quote.turnaround ? <><br/>Turnaround: {quote.turnaround}</> : null}</div>}
-          {quote.status === 'paid' && <div className="mt-4 rounded-2xl border border-lime/40 bg-lime/10 p-4 text-sm text-cream"><strong>Paid and converted to an order.</strong>{quote.orderId ? <> Order record: {quote.orderId}</> : null}</div>}
-        </li>
-      })}
-    </ul>
-  </div>
+  const counts = useMemo(() => { const x: Record<Filter, number> = { all: quotes.length, requested: 0, payment_sent: 0, paid: 0, expired: 0, cancelled: 0 }; quotes.forEach((q) => x[stateOf(q)]++); return x }, [quotes])
+  const visible = useMemo(() => { const n = query.trim().toLowerCase(); return quotes.filter((q) => (filter === 'all' || stateOf(q) === filter) && (!n || `${q.displayCode} ${q.customer.name} ${q.customer.email} ${q.items.map((i) => i.name)}`.toLowerCase().includes(n))) }, [quotes, filter, query])
+  const price = (q: QuoteRequest) => prices[q.id] ?? (q.finalPriceCents ? String(q.finalPriceCents / 100) : '')
+  const ship = (q: QuoteRequest) => shipping[q.id] ?? (q.shippingCents != null ? String(q.shippingCents / 100) : Number(price(q)) > 60 ? '0' : '8')
+  const msg = (q: QuoteRequest) => messages[q.id] ?? q.managerMessage ?? ''
+  const turn = (q: QuoteRequest) => turnarounds[q.id] ?? q.turnaround ?? ''
+  const send = (q: QuoteRequest) => { setBusy(q.id); void sendQuotePayment(q.id, { finalPrice: Number(price(q)), shipping: Number(ship(q)), managerMessage: msg(q), turnaround: turn(q) }).then((u) => { setQuotes((a) => a.map((x) => x.id === q.id ? u : x)); setConfirmResend(null) }).catch((e) => setError(e instanceof Error ? e.message : 'Could not send quote')).finally(() => setBusy(null)) }
+  const status = (q: QuoteRequest, s: 'requested' | 'cancelled') => { if (s === 'cancelled' && !confirm(`Cancel quote ${q.displayCode}?`)) return; setBusy(q.id); void setQuoteStatus(q.id, s).then((u) => setQuotes((a) => a.map((x) => x.id === q.id ? u : x))).catch((e) => setError(e instanceof Error ? e.message : 'Could not update quote')).finally(() => setBusy(null)) }
+  const filters: [Filter, string, string][] = [['all','All','text-cream'],['requested','Needs pricing','text-lavender'],['payment_sent','Payment sent','text-cyan'],['paid','Paid','text-lime'],['expired','Expired','text-amber-200'],['cancelled','Cancelled','text-pink']]
+  return <div><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-mute">Quote pipeline · price custom work, send checkout, and watch payment status.</p><button onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink-2 px-4 font-extrabold text-cream"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Refresh</button></div>
+  {error && <p className="mt-4 rounded-xl border border-pink/40 bg-pink/10 p-3 font-bold text-pink">{error}</p>}
+  <div className="mt-5 grid grid-cols-3 gap-2 xl:grid-cols-6">{filters.map(([id,label,color]) => <button key={id} onClick={() => { setFilter(id); setExpanded(null) }} className={`min-h-24 rounded-xl border p-3 text-left ${filter === id ? 'border-cyan bg-cyan/10' : 'border-line bg-ink-2 hover:border-cyan/40'}`}><p className={`font-display text-3xl ${color}`}>{counts[id]}</p><p className="mt-1 text-xs font-extrabold uppercase text-mute">{label}</p></button>)}</div>
+  <label className="relative mt-4 block"><Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mute" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search customer, quote number, email, or product…" className="min-h-12 w-full rounded-xl border border-line bg-ink pl-11 pr-4 text-cream outline-none focus:border-cyan" /></label>
+  <ul className="mt-4 space-y-3">{!loading && !visible.length && <li className="rounded-xl border border-dashed border-line p-10 text-center text-mute">No matching quotes.</li>}{visible.map((q) => { const s = stateOf(q), open = expanded === q.id, canSend = Number(price(q)) > 0 && Number(ship(q)) >= 0, total = Number(price(q)||0)+Number(ship(q)||0); const border = s==='paid'?'border-l-lime':s==='payment_sent'?'border-l-cyan':s==='requested'?'border-l-lavender':s==='expired'?'border-l-amber-300':'border-l-pink'; return <li key={q.id} className={`overflow-hidden rounded-xl border border-l-4 border-line bg-ink-2 ${border}`}>
+    <button onClick={() => setExpanded(open ? null : q.id)} className="flex w-full items-start gap-3 p-4 text-left hover:bg-ink/35"><div className="min-w-0 flex-1"><div className="flex flex-wrap gap-2"><span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-extrabold uppercase text-cyan">{labels[s]}</span><span className="text-xs font-bold text-mute">{q.displayCode}</span></div><h3 className="mt-2 font-display text-xl text-cream">{q.customer.name}</h3><p className="truncate text-sm text-mute">{q.customer.email}</p><p className="mt-2 line-clamp-1 text-sm font-bold text-cream/80">{q.items.map((i) => `${i.name} ×${i.qty}`).join(' · ')}</p></div><div className="shrink-0 text-right"><p className="text-xs font-bold uppercase text-mute">{q.finalPriceCents?'Final total':'Estimate'}</p><p className="font-display text-2xl text-lime">{money(q.finalPriceCents?(q.finalPriceCents+(q.shippingCents||0))/100:q.estimateTotal)}</p><span className="ml-auto mt-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-mute">{open?<ChevronUp/>:<ChevronDown/>}</span></div></button>
+    {open && <div className="space-y-4 border-t border-line p-4"><Timeline state={s}/><ul className="space-y-2">{q.items.map((i,n) => { const name=i.custom?.artworkFileName||i.custom?.fileName||'artwork'; return <li key={n} className="flex gap-3 rounded-xl border border-line bg-ink p-3">{i.custom?.artworkUrl&&<Art url={i.custom.artworkUrl} name={name}/>}<div className="min-w-0 flex-1"><b className="text-cream">{i.name} × {i.qty}</b>{i.custom?.bannerNotes&&<p className="text-xs text-mute">{i.custom.bannerNotes}</p>}{i.custom?.canvasNotes&&<p className="text-xs text-mute">{i.custom.canvasNotes}</p>}{i.custom?.artworkUrl&&<button onClick={() => void downloadAdminArtwork(i.custom!.artworkUrl!,name)} className="mt-2 inline-flex min-h-10 items-center gap-2 rounded-lg border border-cyan/40 px-3 text-xs font-extrabold text-cyan"><Download className="h-4 w-4"/> Download</button>}</div><b className="text-lime">~{money(i.estimate*i.qty)}</b></li>})}</ul>
+    {s!=='paid'&&s!=='cancelled'&&<div className="rounded-xl border border-line bg-ink p-4"><div className="flex justify-between"><h4 className="font-display text-xl text-cream">Final quote</h4><p className="font-display text-2xl text-lime">{money(total)}</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2"><Field label="Project price" value={price(q)} onChange={(v)=>setPrices(a=>({...a,[q.id]:v}))} money/><Field label="Shipping" value={ship(q)} onChange={(v)=>setShipping(a=>({...a,[q.id]:v}))} money/><Field label="Turnaround" value={turn(q)} onChange={(v)=>setTurnarounds(a=>({...a,[q.id]:v}))}/><label><span className="mb-1 block text-xs font-extrabold uppercase text-mute">Customer message</span><textarea value={msg(q)} onChange={(e)=>setMessages(a=>({...a,[q.id]:e.target.value}))} rows={3} className="w-full rounded-xl border border-line bg-ink-2 p-3 text-cream"/></label></div>{s==='requested'?<button disabled={!canSend||busy===q.id} onClick={()=>send(q)} className="mt-4 inline-flex min-h-12 items-center gap-2 rounded-xl bg-lime px-4 font-extrabold text-ink disabled:opacity-40"><Mail/> Approve & email payment link</button>:confirmResend===q.id?<button disabled={!canSend||busy===q.id} onClick={()=>send(q)} className="mt-4 min-h-12 rounded-xl bg-lime px-4 font-extrabold text-ink">Confirm & send new link</button>:<button onClick={()=>setConfirmResend(q.id)} className="mt-4 min-h-12 rounded-xl border border-cyan px-4 font-extrabold text-cyan">Create & resend payment link</button>}</div>}
+    {s==='expired'&&<p className="flex gap-2 rounded-xl border border-amber-300/40 bg-amber-300/10 p-4 text-amber-200"><Clock3/>Previous checkout link is over 24 hours old.</p>}{s==='paid'&&<p className="rounded-xl border border-lime/40 bg-lime/10 p-4 font-bold text-lime">Paid and converted to order {q.orderId}.</p>}{s==='cancelled'?<button onClick={()=>status(q,'requested')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-cyan px-4 font-bold text-cyan"><RotateCcw/> Restore quote</button>:s!=='paid'&&<button onClick={()=>status(q,'cancelled')} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-pink/40 px-4 font-bold text-pink"><Trash2/> Cancel quote</button>}</div>}</li>})}</ul></div>
 }
+
+function Field({label,value,onChange,money:cash=false}:{label:string;value:string;onChange:(v:string)=>void;money?:boolean}) { return <label><span className="mb-1 block text-xs font-extrabold uppercase text-mute">{label}</span><span className="flex items-center rounded-xl border border-line bg-ink-2 px-3">{cash&&<b className="text-lime">$</b>}<input type={cash?'number':'text'} min={cash?'0':undefined} step={cash?'0.01':undefined} value={value} onChange={(e)=>onChange(e.target.value)} className="min-h-12 min-w-0 flex-1 bg-transparent px-2 text-cream outline-none"/></span></label> }
