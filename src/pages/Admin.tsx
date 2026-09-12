@@ -54,6 +54,7 @@ import QuotesPanel from '../components/admin/QuotesPanel'
 import FilesPanel from '../components/admin/FilesPanel'
 import ActivityPanel from '../components/admin/ActivityPanel'
 import ProductPhotoField from '../components/admin/ProductPhotoField'
+import ImageMigrationPanel from '../components/admin/ImageMigrationPanel'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 const CATEGORIES: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
@@ -731,6 +732,7 @@ export default function Admin() {
 
       {!showAccounts && tab === 'products' && (
         <div>
+          <ImageMigrationPanel onCatalogChanged={() => { void hydrateCatalog(true) }} />
           {justAdded && (
             <p className="mb-4 rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm font-bold text-lime">
               “{justAdded}” is in the shop now. Nice!

@@ -25,6 +25,7 @@
     "test:packing-slip": "node --experimental-strip-types scripts/test-packing-slip.ts",
     "test:manager-reports": "node --experimental-strip-types scripts/test-manager-reports.ts",
     "test:quote-workflow": "node scripts/test-quote-workflow.mjs"
+    ,"migrate:product-images": "node scripts/migrate-product-images.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

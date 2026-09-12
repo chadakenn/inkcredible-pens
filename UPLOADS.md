@@ -50,6 +50,21 @@ Cart/checkout may keep a short-lived client data URL for preview; durable print 
 
 Store Manager **Product photo** field uploads through this API.
 
+### Migrating legacy external product photos
+
+Store Manager → Products includes an image migration panel. Run **Test first 10**, verify
+those storefront images, then run **Migrate all remaining**. Progress and the last 50 errors
+are saved in `data/catalog/image-migration.json`. Each run also creates a dated, complete
+`products.pre-image-migration.*.json` snapshot before changing the catalog. The operation
+is resumable because locally hosted image URLs are skipped.
+
+Recovery from the app directory:
+
+```bash
+npm run migrate:product-images -- --limit=10
+npm run migrate:product-images -- --limit=all
+```
+
 ## Social-post staging images
 
 The OAuth-protected Listings MCP tool `host_social_image` accepts a raw base64 JPEG, PNG,
