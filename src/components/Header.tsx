@@ -4,8 +4,6 @@ import { Heart, Menu, Search, ShoppingBag, X } from 'lucide-react'
 import { useCart } from '../store/cart'
 import { useFavorites } from '../store/favorites'
 import LogoMark from './LogoMark'
-import FacebookIcon from './FacebookIcon'
-import { GRAPHICS_FACEBOOK_URL, PENS_FACEBOOK_URL } from '../lib/socialLinks'
 
 const navLinks = [
   { label: 'Pens', to: '/pens' },
@@ -80,16 +78,6 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <a
-            href={PENS_FACEBOOK_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="hidden min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-ink-2 text-cyan transition hover:border-cyan/50 hover:bg-cyan/10 lg:inline-flex"
-            aria-label="Inkcredible Pens on Facebook"
-            title="Inkcredible Pens on Facebook"
-          >
-            <FacebookIcon className="h-5 w-5" />
-          </a>
           <Link
             to="/favorites"
             className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-ink-2 text-cream transition hover:border-pink/50 hover:text-pink active:bg-ink-3"
@@ -160,24 +148,6 @@ export default function Header() {
           className="flex flex-col gap-1 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           aria-label="Mobile"
         >
-          <a
-            href={PENS_FACEBOOK_URL}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => setMenuOpen(false)}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-3 text-left text-base font-bold text-cyan transition active:bg-ink-3"
-          >
-            <FacebookIcon className="h-5 w-5" /> Inkcredible Pens on Facebook
-          </a>
-          <a
-            href={GRAPHICS_FACEBOOK_URL}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() => setMenuOpen(false)}
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl px-4 py-3 text-left text-base font-bold text-cyan transition active:bg-ink-3"
-          >
-            <FacebookIcon className="h-5 w-5" /> Inkcredible Graphics on Facebook
-          </a>
           <Link
             to="/search"
             onClick={() => setMenuOpen(false)}
