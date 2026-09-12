@@ -1,6 +1,6 @@
 /** Permanent paid-order artwork archive, intended for a dedicated LXC mount. */
 import { randomUUID } from 'node:crypto'
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import multer from 'multer'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -15,6 +15,8 @@ export const CUSTOMER_FILES_DIR = path.resolve(
 )
 
 mkdirSync(CUSTOMER_FILES_DIR, { recursive: true })
+const RECYCLE_DIR = path.join(CUSTOMER_FILES_DIR, '.recycle-bin')
+mkdirSync(RECYCLE_DIR, { recursive: true })
 
 const MAX_MANAGER_FILE_BYTES = 25 * 1024 * 1024
 const managerUpload = multer({
@@ -60,11 +62,36 @@ function walkFiles(dir, relative = '', result = []) {
         size: info.size,
         modifiedAt: info.mtime.toISOString(),
         previewable: /\.(?:jpe?g|png|webp|gif)$/i.test(entry.name),
+        manual: nextRelative.split('/').some((part) => part.includes('_MANUAL-')),
       })
     }
     if (result.length >= 5000) break
   }
   return result
+}
+
+function listRecycledFiles() {
+  const result = []
+  for (const entry of readdirSync(RECYCLE_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^[a-f0-9-]{36}$/i.test(entry.name)) continue
+    try {
+      const dir = path.join(RECYCLE_DIR, entry.name)
+      const metadata = JSON.parse(readFileSync(path.join(dir, 'metadata.json'), 'utf8'))
+      const stored = path.join(dir, 'file')
+      if (!statSync(stored).isFile()) continue
+      const info = statSync(stored)
+      result.push({
+        id: entry.name,
+        name: String(metadata.name || 'file'),
+        originalPath: String(metadata.originalPath || ''),
+        deletedAt: String(metadata.deletedAt || info.mtime.toISOString()),
+        size: info.size,
+      })
+    } catch {
+      // Ignore incomplete recycle entries instead of breaking the manager page.
+    }
+  }
+  return result.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt))
 }
 
 function resolveManagerFile(relativePath) {
@@ -76,6 +103,28 @@ function resolveManagerFile(relativePath) {
 
 function managerFileUrl(relativePath) {
   return `/api/admin/customer-files/file?path=${encodeURIComponent(relativePath)}`
+}
+
+function assertManualFile(relativePath) {
+  const resolved = resolveManagerFile(relativePath)
+  if (!resolved) throw Object.assign(new Error('invalid_path'), { code: 'invalid_path' })
+  if (!resolved.normalized.split('/').some((part) => part.includes('_MANUAL-'))) {
+    throw Object.assign(new Error('order_file_locked'), { code: 'order_file_locked' })
+  }
+  if (!existsSync(resolved.absolute) || !statSync(resolved.absolute).isFile()) {
+    throw Object.assign(new Error('not_found'), { code: 'not_found' })
+  }
+  return resolved
+}
+
+function uniqueDestination(dir, filename, currentPath = null) {
+  let destination = path.join(dir, filename)
+  if (currentPath && destination === currentPath) return destination
+  if (!existsSync(destination)) return destination
+  const ext = path.extname(filename)
+  const stem = path.basename(filename, ext)
+  destination = path.join(dir, `${stem}-${randomUUID().slice(0, 8)}${ext}`)
+  return destination
 }
 
 /** Copy referenced temporary artwork into a durable YYYY/MM/order-code folder. */
@@ -128,7 +177,7 @@ export function mountCustomerFiles(app) {
       const files = walkFiles(CUSTOMER_FILES_DIR)
         .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
         .map((file) => ({ ...file, url: managerFileUrl(file.path) }))
-      return res.json({ files })
+      return res.json({ files, recycled: listRecycledFiles() })
     } catch (error) {
       console.error('[customer-files] list failed', error)
       return res.status(500).json({ error: 'list_failed' })
@@ -214,6 +263,87 @@ export function mountCustomerFiles(app) {
       res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/[^\w.\-()+ ]+/g, '_').slice(0, 120)}"`)
     }
     return res.sendFile(resolved.absolute)
+  })
+
+  app.patch('/api/admin/customer-files/file', requireAdmin, (req, res) => {
+    try {
+      const source = assertManualFile(req.body?.path)
+      const parts = source.normalized.split('/')
+      if (parts.length < 4 || !/^\d{4}$/.test(parts[0]) || !/^\d{2}$/.test(parts[1])) {
+        return res.status(400).json({ error: 'invalid_path' })
+      }
+      const customer = safePart(req.body?.customerName, 'Unsorted')
+      const job = safePart(req.body?.jobName, 'Manual-Upload')
+      const destinationDir = path.join(CUSTOMER_FILES_DIR, parts[0], parts[1], `${customer}_MANUAL-${job}`)
+      mkdirSync(destinationDir, { recursive: true })
+      const currentExt = path.extname(source.absolute).toLowerCase()
+      const requestedStem = safePart(path.basename(String(req.body?.fileName || path.basename(source.absolute)), path.extname(String(req.body?.fileName || ''))), 'artwork')
+      const destination = uniqueDestination(destinationDir, `${requestedStem}${currentExt}`, source.absolute)
+      if (destination !== source.absolute) renameSync(source.absolute, destination)
+      const relativePath = path.relative(CUSTOMER_FILES_DIR, destination).split(path.sep).join('/')
+      const info = statSync(destination)
+      return res.json({
+        file: {
+          path: relativePath,
+          name: path.basename(destination),
+          folder: path.dirname(relativePath).split(path.sep).join('/'),
+          size: info.size,
+          modifiedAt: info.mtime.toISOString(),
+          previewable: /\.(?:jpe?g|png|webp|gif)$/i.test(destination),
+          manual: true,
+          url: managerFileUrl(relativePath),
+        },
+      })
+    } catch (error) {
+      const code = error?.code || 'update_failed'
+      return res.status(code === 'not_found' ? 404 : 400).json({ error: code })
+    }
+  })
+
+  app.delete('/api/admin/customer-files/file', requireAdmin, (req, res) => {
+    try {
+      const source = assertManualFile(req.query.path)
+      const id = randomUUID()
+      const recycleEntry = path.join(RECYCLE_DIR, id)
+      mkdirSync(recycleEntry, { recursive: false, mode: 0o750 })
+      renameSync(source.absolute, path.join(recycleEntry, 'file'))
+      writeFileSync(path.join(recycleEntry, 'metadata.json'), JSON.stringify({
+        name: path.basename(source.absolute),
+        originalPath: source.normalized,
+        deletedAt: new Date().toISOString(),
+      }, null, 2), { mode: 0o640 })
+      return res.json({ ok: true, id })
+    } catch (error) {
+      const code = error?.code || 'recycle_failed'
+      return res.status(code === 'not_found' ? 404 : 400).json({ error: code })
+    }
+  })
+
+  app.post('/api/admin/customer-files/recycle/:id/restore', requireAdmin, (req, res) => {
+    const id = String(req.params.id || '')
+    if (!/^[a-f0-9-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid_id' })
+    try {
+      const entry = path.join(RECYCLE_DIR, id)
+      const metadata = JSON.parse(readFileSync(path.join(entry, 'metadata.json'), 'utf8'))
+      const original = resolveManagerFile(metadata.originalPath)
+      if (!original || !original.normalized.split('/').some((part) => part.includes('_MANUAL-'))) return res.status(400).json({ error: 'invalid_path' })
+      mkdirSync(path.dirname(original.absolute), { recursive: true })
+      const destination = uniqueDestination(path.dirname(original.absolute), path.basename(original.absolute))
+      renameSync(path.join(entry, 'file'), destination)
+      rmSync(entry, { recursive: true, force: true })
+      return res.json({ ok: true })
+    } catch {
+      return res.status(404).json({ error: 'not_found' })
+    }
+  })
+
+  app.delete('/api/admin/customer-files/recycle/:id', requireAdmin, (req, res) => {
+    const id = String(req.params.id || '')
+    if (!/^[a-f0-9-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid_id' })
+    const entry = path.join(RECYCLE_DIR, id)
+    if (!existsSync(entry)) return res.status(404).json({ error: 'not_found' })
+    rmSync(entry, { recursive: true, force: false })
+    return res.json({ ok: true })
   })
 
   app.get('/api/admin/customer-files/:year/:month/:order/:name', requireAdmin, (req, res) => {
