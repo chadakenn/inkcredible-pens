@@ -17,6 +17,7 @@ import {
   KeyRound,
   LayoutDashboard,
   FileText,
+  FolderOpen,
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
@@ -42,6 +43,7 @@ import LogoMark from '../components/LogoMark'
 import OrdersPanel from '../components/admin/OrdersPanel'
 import ManagerDashboard from '../components/admin/ManagerDashboard'
 import QuotesPanel from '../components/admin/QuotesPanel'
+import FilesPanel from '../components/admin/FilesPanel'
 import ProductPhotoField from '../components/admin/ProductPhotoField'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -152,7 +154,7 @@ function CanvasPriceEditor({
   )
 }
 
-type AdminTab = 'dashboard' | 'products' | 'scents' | 'orders' | 'quotes'
+type AdminTab = 'dashboard' | 'products' | 'scents' | 'orders' | 'quotes' | 'files'
 
 interface ProductEditForm {
   id: string
@@ -177,13 +179,14 @@ function isQuotaError(error: unknown): boolean {
 const TABS: { id: AdminTab; label: string; icon: typeof Package }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'quotes', label: 'Quotes', icon: FileText },
+  { id: 'files', label: 'Files', icon: FolderOpen },
   { id: 'products', label: 'Products', icon: Package },
   { id: 'scents', label: 'Scents', icon: Droplets },
   { id: 'orders', label: 'Orders', icon: ClipboardList },
 ]
 
 function parseTab(raw: string | null): AdminTab {
-  if (raw === 'dashboard' || raw === 'quotes' || raw === 'scents' || raw === 'orders' || raw === 'products') return raw
+  if (raw === 'dashboard' || raw === 'quotes' || raw === 'files' || raw === 'scents' || raw === 'orders' || raw === 'products') return raw
   return 'dashboard'
 }
 
@@ -709,6 +712,7 @@ export default function Admin() {
 
       {tab === 'dashboard' && <div className="mt-8"><ManagerDashboard onOpenOrders={() => setTab('orders')} onOpenOrder={openOrder} /></div>}
       {tab === 'quotes' && <div className="mt-8"><QuotesPanel /></div>}
+      {tab === 'files' && <div className="mt-8"><FilesPanel /></div>}
 
       {tab === 'products' && (
         <div className="mt-8">
