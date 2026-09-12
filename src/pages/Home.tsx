@@ -11,7 +11,7 @@ import { useRecentlyViewed } from '../store/recentlyViewed'
 import type { Category, Product } from '../data/products'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
-const FEATURED_PER_CAT = 2
+const FEATURED_PER_CAT = 1
 const FEATURED_ORDER: Category[] = ['Pens', 'Stickers', 'Car Freshies', 'Canvas', 'Custom']
 
 const shopQuick = [
@@ -32,7 +32,7 @@ export default function Home() {
       const inCat = products.filter((p) => p.category === cat)
       picks.push(...inCat.slice(0, FEATURED_PER_CAT))
     }
-    return picks.slice(0, 8)
+    return picks.slice(0, 4)
   }, [products])
 
   const recent = useMemo(() => {
@@ -76,6 +76,8 @@ export default function Home() {
           </div>
         </section>
       )}
+
+      <CustomBanner />
 
       {featured.length > 0 && (
         <section className="mx-auto max-w-6xl px-4 py-9 sm:px-6 sm:py-11">
@@ -122,7 +124,6 @@ export default function Home() {
       )}
 
       <BrandQuotes />
-      <CustomBanner />
     </>
   )
 }

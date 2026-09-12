@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Car, Frame, Mail, PenLine, Sparkles, Sticker, Wand2 } from 'lucide-react'
+import { ArrowRight, Car, Frame, Mail, MapPin, PenLine, Sparkles, Sticker, Truck, Wand2 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useCatalog } from '../store/catalog'
-import LogoMark from './LogoMark'
+import ProductArt from './ProductArt'
 import type { Category } from '../data/products'
+import { pathForCustomProduct } from '../store/shop'
+
+const HERO_PICK_SEED = crypto.getRandomValues(new Uint32Array(1))[0]
 
 const shopPaths: {
   id: string
@@ -76,6 +79,11 @@ export default function Hero() {
     }
     return map
   }, [products])
+  const featuredProduct = useMemo(() => {
+    const choices = products.filter((product) => !product.hidden && product.inventoryQuantity !== 0 && product.imageUrl)
+    return choices.length ? choices[HERO_PICK_SEED % choices.length] : null
+  }, [products])
+  const featuredPath = featuredProduct ? pathForCustomProduct(featuredProduct.id) ?? `/product/${featuredProduct.id}` : '/shop'
 
   return (
     <section className="relative overflow-hidden border-b border-line">
@@ -87,7 +95,6 @@ export default function Hero() {
       <div className="relative mx-auto max-w-6xl px-4 pt-8 pb-7 sm:px-6 sm:pt-10 sm:pb-9">
         <div className="grid gap-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
           <div className="animate-fade-up space-y-4">
-            <LogoMark size="lg" className="mb-1" />
             <p className="inline-flex items-center gap-2 rounded-full border border-cyan/40 bg-ink-2 px-3 py-1 text-xs font-extrabold uppercase tracking-wider text-cyan">
               <Sparkles className="h-3.5 w-3.5" />
               Humor · Hustle · Heart
@@ -111,6 +118,7 @@ export default function Hero() {
                 <Mail className="h-4 w-4 text-cyan" /> Custom studio
               </Link>
             </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1 text-xs font-bold text-mute"><span className="inline-flex items-center gap-1.5"><Truck className="h-4 w-4 text-lime" /> Free shipping over $60</span><span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-pink" /> Made to order in Ohio</span></div>
           </div>
 
           <div
@@ -118,25 +126,9 @@ export default function Hero() {
             style={{ animationDelay: '60ms' }}
           >
             <div className="relative overflow-hidden rounded-[1.75rem] border-4 border-cyan checker-md p-1 shadow-[0_0_40px_rgba(34,211,238,0.22)]">
-              <div className="flex flex-col items-center rounded-[1.4rem] bg-ink/90 p-5 backdrop-blur-sm sm:p-6">
-                <LogoMark size="xl" />
-                <p className="mt-4 text-sm font-bold text-mute">Pens · Stickers · Freshies · Canvas</p>
-                <div className="mt-3 flex flex-wrap justify-center gap-2">
-                  {['$6 pens', 'Vinyl', 'Handmade', 'Custom'].map((tag, i) => (
-                    <span
-                      key={tag}
-                      className={`rounded-full px-2.5 py-1 text-[11px] font-extrabold ${
-                        ['bg-cyan text-ink', 'bg-pink text-white', 'bg-lime text-ink', 'bg-lavender text-ink'][i]
-                      }`}
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-                <p className="mt-4 text-xs text-mute">
-                  Shop small. Make it Inkcredible.
-                </p>
-              </div>
+              <Link to={featuredPath} className="group block overflow-hidden rounded-[1.4rem] bg-ink/95 backdrop-blur-sm">
+                {featuredProduct ? <><div className="aspect-[4/3] overflow-hidden bg-ink-3"><ProductArt product={featuredProduct} className="h-full w-full transition duration-500 group-hover:scale-[1.03]" /></div><div className="p-5"><div className="flex items-center justify-between gap-3"><span className="rounded-full bg-pink px-2.5 py-1 text-[10px] font-extrabold uppercase text-white">Random pick</span><span className="font-display text-xl text-lime">{featuredProduct.optionGroups?.length ? 'From ' : ''}${featuredProduct.price.toFixed(2)}</span></div><p className="mt-3 text-xs font-extrabold uppercase tracking-wider text-cyan">{featuredProduct.category}</p><h2 className="mt-1 line-clamp-2 font-display text-2xl leading-tight text-cream">{featuredProduct.name}</h2><span className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-lime">See this product <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" /></span></div></> : <div className="flex aspect-square items-center justify-center p-8 text-center"><p className="font-display text-2xl text-cream">Shop small.<br />Make it Inkcredible.</p></div>}
+              </Link>
             </div>
           </div>
         </div>
