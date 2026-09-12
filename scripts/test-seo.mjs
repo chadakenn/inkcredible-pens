@@ -23,6 +23,9 @@ assert.doesNotMatch(html, /Bright <Bold> Pen/)
 const missing = renderSeoDocument('/product/missing', products)
 assert.match(missing, /name="robots" content="noindex"/)
 
+const shippingReturns = renderSeoDocument('/shipping-returns', products)
+assert.match(shippingReturns, /Shipping &amp; Returns \| Inkcredible/)
+
 const sitemap = sitemapXml(products)
 assert.match(sitemap, /\/product\/test%20%26%20pen/)
 assert.doesNotMatch(sitemap, /hidden-product/)
