@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /checkout
+Disallow: /proof/
+Disallow: /api/
+
+Sitemap: https://inkcredible.kennedyshome.com/sitemap.xml

@@ -21,6 +21,7 @@ import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { activityMiddleware, mountActivity } from './activity.mjs'
 import { mountStoreSettings } from './store-settings.mjs'
+import { mountSeo } from './seo.mjs'
 import { priceCart } from './pricing.mjs'
 import {
   attachStripeSession,
@@ -183,6 +184,7 @@ mountCatalog(app)
 mountScents(app)
 mountListingsMcp(app)
 mountQuotes(app, { createPaymentSession: createQuotePaymentSession })
+mountSeo(app)
 
 app.get('/api/health', (_req, res) => {
   res.json({

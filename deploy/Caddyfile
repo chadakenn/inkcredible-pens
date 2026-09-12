@@ -31,6 +31,12 @@ http://inkcredible.kennedyshome.com {
 		reverse_proxy 127.0.0.1:4242
 	}
 
+	# Server-rendered metadata for link previews, product search results, and sitemap
+	@seoPages path / /shop /pens /stickers /freshies /canvas /custom /contact /custom/* /product/* /sitemap.xml
+	handle @seoPages {
+		reverse_proxy 127.0.0.1:4242
+	}
+
 	# React SPA from vite build; unknown paths → index.html
 	handle {
 		root * /opt/inkcredible-pens/dist

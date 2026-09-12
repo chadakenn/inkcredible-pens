@@ -75,6 +75,18 @@ else
   echo "    systemd unit 'inkcredible' not found — start Node manually with .env loaded"
 fi
 
+echo "==> Reload Caddy routing"
+if command -v caddy >/dev/null 2>&1 && systemctl is-active --quiet caddy.service; then
+  if sudo caddy validate --config /etc/caddy/Caddyfile >/dev/null; then
+    sudo systemctl reload caddy.service
+  else
+    echo "ERROR: Caddy configuration is invalid — API restarted, Caddy not reloaded."
+    exit 1
+  fi
+else
+  echo "    Caddy is not installed or active — skipped reload"
+fi
+
 echo "==> Sacred paths still present:"
 ls -ld data data/orders data/catalog data/admin data/checkouts uploads uploads/custom uploads/products uploads/social 2>/dev/null || true
 [[ -f .env ]] && echo "    .env OK" || echo "    .env MISSING"
