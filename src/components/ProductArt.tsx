@@ -118,9 +118,11 @@ export default function ProductArt({
     <div className={`relative overflow-hidden bg-ink-3 ${className}`}>
       {!loaded && (
         <div
-          className="absolute inset-0 animate-pulse checker-sm opacity-40"
+          className="absolute inset-0 flex animate-pulse items-center justify-center bg-gradient-to-br from-ink-3 via-ink-2 to-ink"
           aria-hidden
-        />
+        >
+          <span className="rounded-full border border-line bg-ink/70 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-mute">Loading artwork…</span>
+        </div>
       )}
       <img
         src={product.imageUrl}
