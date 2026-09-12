@@ -67,8 +67,12 @@ export async function updateCustomerFile(input: { path: string; customerName: st
   return (await readJson<{ file: CustomerFileRecord }>(response)).file
 }
 
-export async function recycleCustomerFile(path: string, unlockConfirmed = false): Promise<void> {
-  const response = await fetch(`/api/admin/customer-files/file?path=${encodeURIComponent(path)}&unlock=${unlockConfirmed ? '1' : '0'}`, { method: 'DELETE', headers: adminAuthHeaders() })
+export async function recycleCustomerFile(path: string, unlockConfirmed = false, overridePin = ''): Promise<void> {
+  const response = await fetch(`/api/admin/customer-files/file?path=${encodeURIComponent(path)}&unlock=${unlockConfirmed ? '1' : '0'}`, {
+    method: 'DELETE',
+    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ overridePin }),
+  })
   await readJson<{ ok: true }>(response)
 }
 
