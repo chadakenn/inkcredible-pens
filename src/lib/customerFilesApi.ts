@@ -8,6 +8,8 @@ export interface CustomerFileRecord {
   modifiedAt: string
   previewable: boolean
   manual: boolean
+  cleanupEligible: boolean
+  cleanupEligibleAt: string | null
   url: string
 }
 
@@ -17,6 +19,8 @@ export interface RecycledCustomerFile {
   originalPath: string
   deletedAt: string
   size: number
+  deleteEligibleAt: string
+  deleteEligible: boolean
 }
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -37,8 +41,8 @@ export async function updateCustomerFile(input: { path: string; customerName: st
   return (await readJson<{ file: CustomerFileRecord }>(response)).file
 }
 
-export async function recycleCustomerFile(path: string): Promise<void> {
-  const response = await fetch(`/api/admin/customer-files/file?path=${encodeURIComponent(path)}`, { method: 'DELETE', headers: adminAuthHeaders() })
+export async function recycleCustomerFile(path: string, unlockConfirmed = false): Promise<void> {
+  const response = await fetch(`/api/admin/customer-files/file?path=${encodeURIComponent(path)}&unlock=${unlockConfirmed ? '1' : '0'}`, { method: 'DELETE', headers: adminAuthHeaders() })
   await readJson<{ ok: true }>(response)
 }
 

@@ -17,6 +17,8 @@ export const CUSTOMER_FILES_DIR = path.resolve(
 mkdirSync(CUSTOMER_FILES_DIR, { recursive: true })
 const RECYCLE_DIR = path.join(CUSTOMER_FILES_DIR, '.recycle-bin')
 mkdirSync(RECYCLE_DIR, { recursive: true })
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
+const RECYCLE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 const MAX_MANAGER_FILE_BYTES = 25 * 1024 * 1024
 const managerUpload = multer({
@@ -55,6 +57,8 @@ function walkFiles(dir, relative = '', result = []) {
     if (entry.isDirectory()) walkFiles(absolute, nextRelative, result)
     else if (entry.isFile()) {
       const info = statSync(absolute)
+      const manual = nextRelative.split('/').some((part) => part.includes('_MANUAL-'))
+      const cleanupEligibleAt = new Date(info.mtimeMs + ONE_YEAR_MS).toISOString()
       result.push({
         path: nextRelative,
         name: entry.name,
@@ -62,7 +66,9 @@ function walkFiles(dir, relative = '', result = []) {
         size: info.size,
         modifiedAt: info.mtime.toISOString(),
         previewable: /\.(?:jpe?g|png|webp|gif)$/i.test(entry.name),
-        manual: nextRelative.split('/').some((part) => part.includes('_MANUAL-')),
+        manual,
+        cleanupEligible: manual || Date.now() >= info.mtimeMs + ONE_YEAR_MS,
+        cleanupEligibleAt: manual ? null : cleanupEligibleAt,
       })
     }
     if (result.length >= 5000) break
@@ -80,18 +86,37 @@ function listRecycledFiles() {
       const stored = path.join(dir, 'file')
       if (!statSync(stored).isFile()) continue
       const info = statSync(stored)
+      const deletedAt = String(metadata.deletedAt || info.mtime.toISOString())
+      const deleteEligibleAt = new Date(Date.parse(deletedAt) + RECYCLE_RETENTION_MS).toISOString()
       result.push({
         id: entry.name,
         name: String(metadata.name || 'file'),
         originalPath: String(metadata.originalPath || ''),
-        deletedAt: String(metadata.deletedAt || info.mtime.toISOString()),
+        deletedAt,
         size: info.size,
+        deleteEligibleAt,
+        deleteEligible: Date.now() >= Date.parse(deleteEligibleAt),
       })
     } catch {
       // Ignore incomplete recycle entries instead of breaking the manager page.
     }
   }
   return result.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt))
+}
+
+function purgeExpiredRecycledFiles() {
+  const now = Date.now()
+  let removed = 0
+  for (const file of listRecycledFiles()) {
+    if (Date.parse(file.deleteEligibleAt) > now) continue
+    try {
+      rmSync(path.join(RECYCLE_DIR, file.id), { recursive: true, force: true })
+      removed += 1
+    } catch (error) {
+      console.error('[customer-files] recycle purge failed', file.id, error)
+    }
+  }
+  if (removed) console.log(`[customer-files] recycle purge removed=${removed}`)
 }
 
 function resolveManagerFile(relativePath) {
@@ -114,6 +139,20 @@ function assertManualFile(relativePath) {
   if (!existsSync(resolved.absolute) || !statSync(resolved.absolute).isFile()) {
     throw Object.assign(new Error('not_found'), { code: 'not_found' })
   }
+  return resolved
+}
+
+function assertCleanupAllowed(relativePath, unlockConfirmed) {
+  const resolved = resolveManagerFile(relativePath)
+  if (!resolved) throw Object.assign(new Error('invalid_path'), { code: 'invalid_path' })
+  if (!existsSync(resolved.absolute) || !statSync(resolved.absolute).isFile()) {
+    throw Object.assign(new Error('not_found'), { code: 'not_found' })
+  }
+  const manual = resolved.normalized.split('/').some((part) => part.includes('_MANUAL-'))
+  if (manual) return resolved
+  const eligible = Date.now() >= statSync(resolved.absolute).mtimeMs + ONE_YEAR_MS
+  if (!eligible) throw Object.assign(new Error('order_file_locked'), { code: 'order_file_locked' })
+  if (!unlockConfirmed) throw Object.assign(new Error('cleanup_unlock_required'), { code: 'cleanup_unlock_required' })
   return resolved
 }
 
@@ -172,6 +211,10 @@ export function archivePaidOrderArtwork(items, { displayCode, createdAt, custome
 
 /** Admin-only download route used by Store Manager order records. */
 export function mountCustomerFiles(app) {
+  purgeExpiredRecycledFiles()
+  const recycleTimer = setInterval(purgeExpiredRecycledFiles, 24 * 60 * 60 * 1000)
+  recycleTimer.unref?.()
+
   app.get('/api/admin/customer-files', requireAdmin, (_req, res) => {
     try {
       const files = walkFiles(CUSTOMER_FILES_DIR)
@@ -235,6 +278,9 @@ export function mountCustomerFiles(app) {
             size: contents.length,
             modifiedAt: now.toISOString(),
             previewable,
+            manual: true,
+            cleanupEligible: true,
+            cleanupEligibleAt: null,
             url: managerFileUrl(relativePath),
           },
         })
@@ -291,6 +337,8 @@ export function mountCustomerFiles(app) {
           modifiedAt: info.mtime.toISOString(),
           previewable: /\.(?:jpe?g|png|webp|gif)$/i.test(destination),
           manual: true,
+          cleanupEligible: true,
+          cleanupEligibleAt: null,
           url: managerFileUrl(relativePath),
         },
       })
@@ -302,7 +350,7 @@ export function mountCustomerFiles(app) {
 
   app.delete('/api/admin/customer-files/file', requireAdmin, (req, res) => {
     try {
-      const source = assertManualFile(req.query.path)
+      const source = assertCleanupAllowed(req.query.path, String(req.query.unlock) === '1')
       const id = randomUUID()
       const recycleEntry = path.join(RECYCLE_DIR, id)
       mkdirSync(recycleEntry, { recursive: false, mode: 0o750 })
@@ -326,7 +374,7 @@ export function mountCustomerFiles(app) {
       const entry = path.join(RECYCLE_DIR, id)
       const metadata = JSON.parse(readFileSync(path.join(entry, 'metadata.json'), 'utf8'))
       const original = resolveManagerFile(metadata.originalPath)
-      if (!original || !original.normalized.split('/').some((part) => part.includes('_MANUAL-'))) return res.status(400).json({ error: 'invalid_path' })
+      if (!original) return res.status(400).json({ error: 'invalid_path' })
       mkdirSync(path.dirname(original.absolute), { recursive: true })
       const destination = uniqueDestination(path.dirname(original.absolute), path.basename(original.absolute))
       renameSync(path.join(entry, 'file'), destination)
@@ -342,6 +390,14 @@ export function mountCustomerFiles(app) {
     if (!/^[a-f0-9-]{36}$/i.test(id)) return res.status(400).json({ error: 'invalid_id' })
     const entry = path.join(RECYCLE_DIR, id)
     if (!existsSync(entry)) return res.status(404).json({ error: 'not_found' })
+    try {
+      const metadata = JSON.parse(readFileSync(path.join(entry, 'metadata.json'), 'utf8'))
+      if (Date.now() < Date.parse(String(metadata.deletedAt)) + RECYCLE_RETENTION_MS) {
+        return res.status(400).json({ error: 'recycle_retention_active' })
+      }
+    } catch {
+      return res.status(400).json({ error: 'invalid_recycle_entry' })
+    }
     rmSync(entry, { recursive: true, force: false })
     return res.json({ ok: true })
   })

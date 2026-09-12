@@ -58,6 +58,7 @@ export default function FilesPanel() {
   const [editing, setEditing] = useState<({ path: string; fileName: string; customerName: string; jobName: string }) | null>(null)
   const [confirmRecycle, setConfirmRecycle] = useState<string | null>(null)
   const [confirmPermanent, setConfirmPermanent] = useState<string | null>(null)
+  const [cleanupUnlocked, setCleanupUnlocked] = useState<string | null>(null)
 
   const refresh = () => {
     setBusy(true)
@@ -105,10 +106,10 @@ export default function FilesPanel() {
       .finally(() => setBusy(false))
   }
 
-  const recycle = (path: string) => {
+  const recycle = (file: CustomerFileRecord) => {
     setBusy(true)
-    void recycleCustomerFile(path)
-      .then(() => { setConfirmRecycle(null); setMessage('File moved to the recycle bin.'); refresh() })
+    void recycleCustomerFile(file.path, !file.manual)
+      .then(() => { setConfirmRecycle(null); setCleanupUnlocked(null); setMessage('File moved to the recycle bin.'); refresh() })
       .catch((error) => { setMessage(error instanceof Error ? error.message : 'Could not recycle file.'); setBusy(false) })
   }
 
@@ -153,13 +154,15 @@ export default function FilesPanel() {
         {visible.map((file) => <article key={file.path} className="rounded-2xl border border-line bg-ink-2 p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <Preview file={file} />
-            <div className="min-w-0 flex-1"><p className="break-all font-bold text-cream">{file.name}</p><p className="mt-1 break-all text-xs text-cyan">{file.folder}</p><p className="mt-1 text-xs text-mute">{formatBytes(file.size)} · {new Date(file.modifiedAt).toLocaleString()}</p>{!file.manual && <p className="mt-2 text-xs font-bold text-lime">Linked to a paid order · management locked</p>}</div>
+            <div className="min-w-0 flex-1"><p className="break-all font-bold text-cream">{file.name}</p><p className="mt-1 break-all text-xs text-cyan">{file.folder}</p><p className="mt-1 text-xs text-mute">{formatBytes(file.size)} · {new Date(file.modifiedAt).toLocaleString()}</p>{!file.manual && <p className={`mt-2 text-xs font-bold ${file.cleanupEligible ? 'text-amber-300' : 'text-lime'}`}>{file.cleanupEligible ? 'One-year lock complete · eligible for cleanup' : `Linked to paid order · locked until ${new Date(file.cleanupEligibleAt!).toLocaleDateString()}`}</p>}</div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void downloadAdminArtwork(file.url, file.name).catch((error) => setMessage(error instanceof Error ? error.message : 'Download failed.'))} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan px-3 font-extrabold text-ink"><Download className="h-4 w-4" /> Download</button>
               {file.manual && <button type="button" onClick={() => setEditing({ path: file.path, fileName: file.name, ...manualLabels(file) })} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line px-3 font-bold text-cream"><Pencil className="h-4 w-4" /> Rename/move</button>}
-              {file.manual && (confirmRecycle === file.path
-                ? <><button type="button" onClick={() => recycle(file.path)} className="min-h-11 rounded-xl bg-pink px-3 font-bold text-white">Confirm recycle</button><button type="button" onClick={() => setConfirmRecycle(null)} className="min-h-11 rounded-xl border border-line px-3 text-cream">Cancel</button></>
+              {(file.manual || cleanupUnlocked === file.path) && (confirmRecycle === file.path
+                ? <><button type="button" onClick={() => recycle(file)} className="min-h-11 rounded-xl bg-pink px-3 font-bold text-white">Confirm recycle</button><button type="button" onClick={() => setConfirmRecycle(null)} className="min-h-11 rounded-xl border border-line px-3 text-cream">Cancel</button></>
                 : <button type="button" onClick={() => setConfirmRecycle(file.path)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-pink/50 px-3 font-bold text-pink"><Trash2 className="h-4 w-4" /> Recycle</button>)}
+              {!file.manual && file.cleanupEligible && cleanupUnlocked !== file.path && <button type="button" onClick={() => setCleanupUnlocked(file.path)} className="min-h-11 rounded-xl border border-amber-300/50 px-3 font-bold text-amber-300">Unlock for cleanup</button>}
+              {!file.manual && cleanupUnlocked === file.path && <button type="button" onClick={() => { setCleanupUnlocked(null); setConfirmRecycle(null) }} className="min-h-11 rounded-xl border border-line px-3 text-cream">Keep locked</button>}
             </div>
           </div>
           {editing?.path === file.path && <form onSubmit={saveEdit} className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
@@ -176,11 +179,11 @@ export default function FilesPanel() {
     {view === 'recycle' && <div className="mt-4 space-y-3">
       <p className="rounded-xl border border-pink/30 bg-pink/10 px-4 py-3 text-sm text-mute">Files stay here until restored or permanently deleted.</p>
       {recycled.map((file) => <article key={file.id} className="flex flex-col gap-3 rounded-2xl border border-line bg-ink-2 p-4 sm:flex-row sm:items-center">
-        <Trash2 className="h-7 w-7 shrink-0 text-pink" /><div className="min-w-0 flex-1"><p className="break-all font-bold text-cream">{file.name}</p><p className="break-all text-xs text-mute">Previously: {file.originalPath}</p><p className="mt-1 text-xs text-mute">{formatBytes(file.size)} · recycled {new Date(file.deletedAt).toLocaleString()}</p></div>
+        <Trash2 className="h-7 w-7 shrink-0 text-pink" /><div className="min-w-0 flex-1"><p className="break-all font-bold text-cream">{file.name}</p><p className="break-all text-xs text-mute">Previously: {file.originalPath}</p><p className="mt-1 text-xs text-mute">{formatBytes(file.size)} · recycled {new Date(file.deletedAt).toLocaleString()}</p><p className="mt-1 text-xs font-bold text-pink">Deletes automatically after {new Date(file.deleteEligibleAt).toLocaleString()}</p></div>
         <button type="button" onClick={() => restore(file.id)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan px-3 font-bold text-ink"><RotateCcw className="h-4 w-4" /> Restore</button>
-        {confirmPermanent === file.id
+        {file.deleteEligible && (confirmPermanent === file.id
           ? <><button type="button" onClick={() => permanentlyDelete(file.id)} className="min-h-11 rounded-xl bg-pink px-3 font-bold text-white">Delete forever</button><button type="button" onClick={() => setConfirmPermanent(null)} className="min-h-11 rounded-xl border border-line px-3 text-cream">Cancel</button></>
-          : <button type="button" onClick={() => setConfirmPermanent(file.id)} className="min-h-11 rounded-xl border border-pink/50 px-3 font-bold text-pink">Delete permanently</button>}
+          : <button type="button" onClick={() => setConfirmPermanent(file.id)} className="min-h-11 rounded-xl border border-pink/50 px-3 font-bold text-pink">Delete permanently</button>)}
       </article>)}
       {!busy && recycled.length === 0 && <p className="rounded-2xl border border-dashed border-line p-10 text-center text-mute">Recycle bin is empty.</p>}
     </div>}
