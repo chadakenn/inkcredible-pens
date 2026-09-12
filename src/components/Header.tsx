@@ -90,16 +90,6 @@ export default function Header() {
           >
             <FacebookIcon className="h-5 w-5" />
           </a>
-          <a
-            href={GRAPHICS_FACEBOOK_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="hidden min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-ink-2 text-cyan transition hover:border-cyan/50 hover:bg-cyan/10 md:inline-flex"
-            aria-label="Inkcredible Graphics on Facebook"
-            title="Inkcredible Graphics on Facebook"
-          >
-            <FacebookIcon className="h-5 w-5" />
-          </a>
           <Link
             to="/favorites"
             className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-line bg-ink-2 text-cream transition hover:border-pink/50 hover:text-pink active:bg-ink-3"
