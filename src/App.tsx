@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
@@ -8,25 +8,30 @@ import ScrollToTop from './components/ScrollToTop'
 import NavProgress from './components/NavProgress'
 import AnnouncementBar from './components/AnnouncementBar'
 import Home from './pages/Home'
-import Shop from './pages/Shop'
-import CategoryPage from './pages/CategoryPage'
-import ProductDetail from './pages/ProductDetail'
-import Checkout from './pages/Checkout'
-import Favorites from './pages/Favorites'
-import Admin from './pages/Admin'
-import AdminOrders from './pages/AdminOrders'
-import CustomLogoStickers from './pages/CustomLogoStickers'
-import CustomBanners from './pages/CustomBanners'
-import CustomCanvas from './pages/CustomCanvas'
-import CustomBusinessCards from './pages/CustomBusinessCards'
-import CustomThankYouCards from './pages/CustomThankYouCards'
-import CustomPhotoFreshie from './pages/CustomPhotoFreshie'
-import SearchPage from './pages/SearchPage'
-import NotFound from './pages/NotFound'
-import Contact from './pages/Contact'
-import ProofApproval from './pages/ProofApproval'
 import { useCatalog } from './store/catalog'
 import { useScents } from './store/scents'
+
+const Shop = lazy(() => import('./pages/Shop'))
+const CategoryPage = lazy(() => import('./pages/CategoryPage'))
+const ProductDetail = lazy(() => import('./pages/ProductDetail'))
+const Checkout = lazy(() => import('./pages/Checkout'))
+const Favorites = lazy(() => import('./pages/Favorites'))
+const Admin = lazy(() => import('./pages/Admin'))
+const AdminOrders = lazy(() => import('./pages/AdminOrders'))
+const CustomLogoStickers = lazy(() => import('./pages/CustomLogoStickers'))
+const CustomBanners = lazy(() => import('./pages/CustomBanners'))
+const CustomCanvas = lazy(() => import('./pages/CustomCanvas'))
+const CustomBusinessCards = lazy(() => import('./pages/CustomBusinessCards'))
+const CustomThankYouCards = lazy(() => import('./pages/CustomThankYouCards'))
+const CustomPhotoFreshie = lazy(() => import('./pages/CustomPhotoFreshie'))
+const SearchPage = lazy(() => import('./pages/SearchPage'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const Contact = lazy(() => import('./pages/Contact'))
+const ProofApproval = lazy(() => import('./pages/ProofApproval'))
+
+function PageLoader() {
+  return <div className="mx-auto flex min-h-[45vh] max-w-6xl items-center justify-center px-4"><div className="text-center"><span className="mx-auto block h-10 w-10 animate-spin rounded-full border-4 border-line border-t-cyan" /><p className="mt-4 font-bold text-mute">Loading…</p></div></div>
+}
 
 function PageFade({ children }: { children: ReactNode }) {
   const location = useLocation()
@@ -55,6 +60,7 @@ export default function App() {
       <Header />
       <main className="flex-1">
         <PageFade>
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/shop" element={<Shop />} />
@@ -79,6 +85,7 @@ export default function App() {
           <Route path="/admin/orders" element={<AdminOrders />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </Suspense>
         </PageFade>
       </main>
       <Footer />
