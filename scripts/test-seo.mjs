@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { renderSeoDocument, sitemapXml } from '../server/seo.mjs'
+import { merchantFeedXml, renderSeoDocument, sitemapXml } from '../server/seo.mjs'
 
 const products = [
   {
@@ -29,3 +29,14 @@ assert.doesNotMatch(sitemap, /hidden-product/)
 assert.doesNotMatch(sitemap, /\/admin/)
 
 console.log('SEO metadata and sitemap tests passed')
+
+const merchantFeed = merchantFeedXml(products)
+assert.match(merchantFeed, /xmlns:g="http:\/\/base\.google\.com\/ns\/1\.0"/)
+assert.match(merchantFeed, /<g:id>test &amp; pen<\/g:id>/)
+assert.match(merchantFeed, /<g:title>Bright &lt;Bold&gt; Pen<\/g:title>/)
+assert.match(merchantFeed, /<g:price>6\.00 USD<\/g:price>/)
+assert.match(merchantFeed, /<g:identifier_exists>no<\/g:identifier_exists>/)
+assert.match(merchantFeed, /<g:availability>in stock<\/g:availability>/)
+assert.doesNotMatch(merchantFeed, /hidden-product/)
+
+console.log('Google Merchant product feed tests passed')

@@ -103,6 +103,21 @@ function publicProducts(products) {
   return products.filter((product) => product && !product.hidden && product.id)
 }
 
+function merchantProducts(products) {
+  return publicProducts(products).filter((product) => product.imageUrl && Number.isFinite(Number(product.price)))
+}
+
+function merchantText(value, maxLength) {
+  return Array.from(String(value ?? ''))
+    .filter((character) => {
+      const code = character.codePointAt(0)
+      return code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127)
+    })
+    .join('')
+    .trim()
+    .slice(0, maxLength)
+}
+
 export function renderSeoDocument(pathname, products = readProducts()) {
   const index = readFileSync(INDEX_FILE, 'utf8')
   const route = cleanPathname(pathname)
@@ -156,9 +171,48 @@ export function sitemapXml(products = readProducts()) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`
 }
 
+export function merchantFeedXml(products = readProducts()) {
+  const items = merchantProducts(products).map((product) => {
+    const id = merchantText(product.id, 50)
+    const title = merchantText(product.name, 150)
+    const description = merchantText(product.description || product.tagline || `Shop ${product.name} from Inkcredible.`, 5000)
+    const link = `${ORIGIN}/product/${encodeURIComponent(product.id)}`
+    const image = absoluteUrl(product.imageUrl)
+    const availability = product.inventoryQuantity === 0 ? 'out of stock' : 'in stock'
+    const category = merchantText(product.category || 'Handmade products', 750)
+    return `    <item>
+      <g:id>${xmlEscape(id)}</g:id>
+      <g:title>${xmlEscape(title)}</g:title>
+      <g:description>${xmlEscape(description)}</g:description>
+      <g:link>${xmlEscape(link)}</g:link>
+      <g:image_link>${xmlEscape(image)}</g:image_link>
+      <g:availability>${availability}</g:availability>
+      <g:price>${Number(product.price).toFixed(2)} USD</g:price>
+      <g:condition>new</g:condition>
+      <g:brand>Inkcredible</g:brand>
+      <g:identifier_exists>no</g:identifier_exists>
+      <g:product_type>${xmlEscape(category)}</g:product_type>
+    </item>`
+  }).join('\n')
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+  <channel>
+    <title>Inkcredible Products</title>
+    <link>${ORIGIN}</link>
+    <description>Live product catalog for Inkcredible handmade and custom products.</description>
+${items}
+  </channel>
+</rss>
+`
+}
+
 export function mountSeo(app) {
   app.get('/sitemap.xml', (_req, res) => {
     res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml())
+  })
+  app.get('/google-products.xml', (_req, res) => {
+    res.type('application/xml').set('Cache-Control', 'public, max-age=900').send(merchantFeedXml())
   })
   app.get(['/', '/shop', '/pens', '/stickers', '/freshies', '/canvas', '/custom', '/contact', '/custom/*page', '/product/:id'], (req, res, next) => {
     try {

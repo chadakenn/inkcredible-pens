@@ -32,7 +32,7 @@ http://inkcredible.kennedyshome.com {
 	}
 
 	# Server-rendered metadata for link previews, product search results, and sitemap
-	@seoPages path / /shop /pens /stickers /freshies /canvas /custom /contact /custom/* /product/* /sitemap.xml
+	@seoPages path / /shop /pens /stickers /freshies /canvas /custom /contact /custom/* /product/* /sitemap.xml /google-products.xml
 	handle @seoPages {
 		reverse_proxy 127.0.0.1:4242
 	}
