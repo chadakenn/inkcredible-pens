@@ -124,10 +124,10 @@ function AdminArtThumb({
   useEffect(() => {
     let revoked: string | null = null
     let cancelled = false
-    if (preview) {
-      setSrc(preview)
-      return
-    }
+    setSrc(preview || '')
+    // Paid-order artwork is moved into protected customer storage. Even when an
+    // older cart preview is present, prefer the durable file fetched with the
+    // Store Manager token so a stale preview URL cannot leave a broken image.
     if (!artUrl) return
     void fetchAdminArtworkObjectUrl(artUrl)
       .then((url) => {
@@ -149,7 +149,12 @@ function AdminArtThumb({
   if (!src) return null
   return (
     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-line bg-ink-2 p-1">
-      <img src={src} alt="" className="h-full w-full object-contain" />
+      <img
+        src={src}
+        alt="Customer artwork preview"
+        className="h-full w-full object-contain"
+        onError={() => setSrc('')}
+      />
     </div>
   )
 }
