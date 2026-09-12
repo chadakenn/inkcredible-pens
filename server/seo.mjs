@@ -18,6 +18,7 @@ const PAGE_META = new Map([
   ['/canvas', ['Canvas Prints | Inkcredible', 'Turn your favorite image into a custom canvas print.']],
   ['/custom', ['Custom Creations | Inkcredible', 'Order custom graphics, signs, cards, stickers, banners, and more.']],
   ['/contact', ['Contact Inkcredible', 'Contact Inkcredible about an order or custom project.']],
+  ['/shipping-returns', ['Shipping & Returns | Inkcredible', 'Inkcredible shipping rates, return eligibility, custom-product policy, and help for damaged orders.']],
 ])
 
 const CUSTOM_META = new Map([

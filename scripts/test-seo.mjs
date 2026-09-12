@@ -27,6 +27,7 @@ const sitemap = sitemapXml(products)
 assert.match(sitemap, /\/product\/test%20%26%20pen/)
 assert.doesNotMatch(sitemap, /hidden-product/)
 assert.doesNotMatch(sitemap, /\/admin/)
+assert.match(sitemap, /\/shipping-returns/)
 
 console.log('SEO metadata and sitemap tests passed')
 

@@ -40,6 +40,7 @@ export default function Footer() {
           <Link to="/custom" className="block text-mute transition hover:text-cyan">Custom studio</Link>
           <Link to="/shop" className="block text-mute transition hover:text-cyan">All categories</Link>
           <Link to="/search" className="block text-mute transition hover:text-cyan">Search</Link>
+          <Link to="/shipping-returns" className="block text-mute transition hover:text-cyan">Shipping &amp; returns</Link>
         </div>
 
         <div className="space-y-3 text-sm">

@@ -27,6 +27,7 @@ const CustomPhotoFreshie = lazy(() => import('./pages/CustomPhotoFreshie'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const Contact = lazy(() => import('./pages/Contact'))
+const ShippingReturns = lazy(() => import('./pages/ShippingReturns'))
 const ProofApproval = lazy(() => import('./pages/ProofApproval'))
 
 function PageLoader() {
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="/product/:id" element={<ProductDetail />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/contact" element={<Contact />} />
+          <Route path="/shipping-returns" element={<ShippingReturns />} />
           <Route path="/proof/:token" element={<ProofApproval />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/orders" element={<AdminOrders />} />
