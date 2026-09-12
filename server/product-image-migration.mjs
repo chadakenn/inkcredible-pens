@@ -58,6 +58,20 @@ export async function readMigrationStatus() {
   try { return JSON.parse(await fs.readFile(JOB_FILE, 'utf8')) } catch { return null }
 }
 
+async function currentMigrationStatus() {
+  const status = await readMigrationStatus()
+  if (status?.status === 'running' && !running) {
+    const interrupted = {
+      ...status,
+      status: 'interrupted',
+      finishedAt: status.finishedAt || new Date().toISOString(),
+    }
+    await saveJob(interrupted)
+    return interrupted
+  }
+  return status
+}
+
 export function migrationCandidates() {
   return readProducts().filter((product) => externalImage(product.imageUrl))
 }
@@ -108,7 +122,7 @@ export async function runImageMigration({ limit = 10 } = {}) {
 export function mountProductImageMigration(app) {
   app.get('/api/admin/product-image-migration', requireAdmin, async (_req, res) => {
     const candidates = migrationCandidates()
-    res.json({ status: await readMigrationStatus(), remaining: candidates.length, preview: candidates.slice(0, 10).map(({ id, name, imageUrl }) => ({ id, name, imageUrl })) })
+    res.json({ status: await currentMigrationStatus(), remaining: candidates.length, preview: candidates.slice(0, 10).map(({ id, name, imageUrl }) => ({ id, name, imageUrl })) })
   })
   app.post('/api/admin/product-image-migration', requireAdmin, (req, res) => {
     if (running) return res.status(409).json({ error: 'migration_running' })
