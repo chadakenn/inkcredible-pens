@@ -215,7 +215,7 @@ export function mountSeo(app) {
   app.get('/google-products.xml', (_req, res) => {
     res.type('application/xml').set('Cache-Control', 'public, max-age=900').send(merchantFeedXml())
   })
-  app.get(['/', '/shop', '/pens', '/stickers', '/freshies', '/canvas', '/custom', '/contact', '/custom/*page', '/product/:id'], (req, res, next) => {
+  app.get(['/', '/shop', '/pens', '/stickers', '/freshies', '/canvas', '/custom', '/contact', '/shipping-returns', '/custom/*page', '/product/:id'], (req, res, next) => {
     try {
       res.type('html').set('Cache-Control', 'public, max-age=300').send(renderSeoDocument(req.path))
     } catch (error) {
