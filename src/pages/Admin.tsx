@@ -642,12 +642,12 @@ export default function Admin() {
 
   return (
     <div className="mx-auto max-w-[1480px] px-3 py-4 sm:px-6 sm:py-6">
-      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-ink-2 px-4 py-4 shadow-2xl shadow-black/20 sm:px-6">
+      <header className="flex flex-col items-stretch gap-4 rounded-2xl border border-line bg-ink-2 px-4 py-4 shadow-2xl shadow-black/20 min-[430px]:flex-row min-[430px]:flex-wrap min-[430px]:items-center min-[430px]:justify-between sm:px-6">
         <div className="flex items-center gap-3">
           <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-lime text-ink"><Store className="h-6 w-6" /></span>
           <div><p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan">Inkcredible</p><h1 className="font-display text-2xl text-cream sm:text-3xl">Store Manager</h1></div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 min-[430px]:flex min-[430px]:items-center">
           <div className="hidden text-right sm:block"><p className="text-sm font-bold text-cream">{adminUser?.displayName || adminUser?.username}</p><p className="text-xs text-mute">Manager account</p></div>
           <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink px-3 text-sm font-bold text-mute hover:border-cyan hover:text-cream"><ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">View shop</span></Link>
           <button type="button" onClick={lock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink px-3 text-sm font-bold text-mute hover:border-pink hover:text-cream"><Lock className="h-4 w-4" /> Lock</button>
@@ -657,10 +657,10 @@ export default function Admin() {
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
         <aside className="sticky top-3 z-20 rounded-2xl border border-line bg-ink-2 p-2 shadow-xl shadow-black/20">
           <p className="hidden px-3 pb-2 pt-3 text-xs font-extrabold uppercase tracking-[0.18em] text-mute lg:block">Workspace</p>
-          <nav aria-label="Store manager sections" className="grid grid-cols-3 gap-1 sm:grid-cols-6 lg:grid-cols-1">
+          <nav aria-label="Store manager sections" className="grid grid-cols-2 gap-1 min-[480px]:grid-cols-4 sm:grid-cols-6 lg:grid-cols-1">
             {TABS.map(({ id, label, icon: Icon }) => {
               const on = tab === id && !showAccounts
-              return <button key={id} type="button" onClick={() => setTab(id)} aria-current={on ? 'page' : undefined} className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-sm font-extrabold transition lg:justify-start lg:px-4 ${on ? 'bg-cyan text-ink shadow-[0_0_18px_rgba(34,211,238,0.25)]' : 'text-mute hover:bg-ink hover:text-cream'}`}><Icon className="h-5 w-5 shrink-0" /><span>{label}</span></button>
+              return <button key={id} type="button" onClick={() => setTab(id)} aria-current={on ? 'page' : undefined} className={`flex min-h-14 min-w-0 items-center justify-center gap-2 rounded-xl px-2 text-xs font-extrabold transition sm:text-sm lg:justify-start lg:px-4 ${on ? 'bg-cyan text-ink shadow-[0_0_18px_rgba(34,211,238,0.25)]' : 'text-mute hover:bg-ink hover:text-cream'}`}><Icon className="h-5 w-5 shrink-0" /><span className="min-w-0 truncate">{label}</span></button>
             })}
           </nav>
           <div className="mt-2 border-t border-line pt-2">
@@ -710,14 +710,14 @@ export default function Admin() {
               <button type="submit" className="min-h-12 w-full rounded-xl bg-lime px-4 text-base font-extrabold text-ink">Change password</button>
             </form>
             </div>
-            <form onSubmit={resetManagerPassword} className="rounded-xl border border-amber-300/30 bg-ink-2 p-5">
+            <form onSubmit={resetManagerPassword} className="rounded-xl border border-amber-300/30 bg-ink-2 p-4 sm:p-5">
               <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-amber-300" /><div><h3 className="font-display text-xl text-cream">Recover a manager account</h3><p className="text-sm text-mute">Reset a forgotten password. Your own password is required to approve it, and the manager will be signed out everywhere.</p></div></div>
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
                 <select required value={resetUserId} onChange={(event) => setResetUserId(event.target.value)} className="min-h-12 rounded-xl border border-line bg-ink px-3 text-cream outline-none focus:border-cyan"><option value="">Choose manager…</option>{adminUsers.filter((user) => user.id !== adminUser?.id).map((user) => <option key={user.id} value={user.id}>{user.displayName} (@{user.username})</option>)}</select>
                 <input required type="password" autoComplete="current-password" value={resetCurrentPassword} onChange={(event) => setResetCurrentPassword(event.target.value)} placeholder="Your current password" className="min-h-12 rounded-xl border border-line bg-ink px-3 text-cream outline-none placeholder:text-mute focus:border-cyan" />
                 <input required type="password" minLength={10} autoComplete="new-password" value={resetNewPassword} onChange={(event) => setResetNewPassword(event.target.value)} placeholder="Their new password (10+)" className="min-h-12 rounded-xl border border-line bg-ink px-3 text-cream outline-none placeholder:text-mute focus:border-cyan" />
               </div>
-              <button disabled={!resetUserId} className="mt-3 min-h-12 rounded-xl bg-amber-300 px-5 font-extrabold text-ink disabled:opacity-40">Reset selected password</button>
+              <button disabled={!resetUserId} className="mt-3 min-h-12 w-full rounded-xl bg-amber-300 px-5 font-extrabold text-ink disabled:opacity-40 sm:w-auto">Reset selected password</button>
             </form>
             {accountError && <p role="alert" className="rounded-xl border border-pink/40 bg-pink/10 px-4 py-3 text-sm font-bold text-pink">{accountError}</p>}
           </div>

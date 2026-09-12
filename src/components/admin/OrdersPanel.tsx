@@ -881,7 +881,7 @@ export default function OrdersPanel() {
 
       {view === 'active' && <>
         {workflowCounts.proof > 0 && <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-lavender/40 bg-lavender/10 px-4 py-3"><div><p className="font-extrabold text-lavender">{workflowCounts.proof} proof{workflowCounts.proof === 1 ? '' : 's'} waiting for customer approval</p><p className="text-xs text-mute">Open the order to review or resend the proof.</p></div><Send className="h-5 w-5 shrink-0 text-lavender" /></div>}
-        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {([
             ['all', 'All', workflowCounts.all, 'text-cream'],
             ['new', 'New', workflowCounts.new, 'text-cyan'],
@@ -903,7 +903,7 @@ export default function OrdersPanel() {
         </label>
         <label>
           <span className="mb-1 block text-xs font-extrabold uppercase tracking-wider text-mute">Order month</span>
-          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="min-h-12 min-w-44 rounded-xl border border-line bg-ink px-3 text-sm text-cream [color-scheme:dark] outline-none focus:border-cyan" />
+          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="min-h-12 w-full rounded-xl border border-line bg-ink px-3 text-sm text-cream [color-scheme:dark] outline-none focus:border-cyan sm:min-w-44" />
         </label>
         {(query || month || statusFilter !== 'all') && (
           <button type="button" onClick={() => { setQuery(''); setMonth(''); setStatusFilter('all') }} className="min-h-12 rounded-xl border border-line bg-ink px-4 text-sm font-extrabold text-cream hover:border-cyan">

@@ -191,7 +191,7 @@ export default function FilesPanel() {
     <div className="rounded-2xl border border-line bg-ink-2 p-5 sm:p-7">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-start gap-3"><FolderOpen className="mt-1 h-7 w-7 text-cyan" /><div><h2 className="font-display text-3xl text-cream">Customer files</h2><p className="mt-1 text-sm text-mute">Find paid artwork, organize outside jobs, and download production-ready files.</p></div></div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:flex">
           <button type="button" onClick={() => setShowUpload((value) => !value)} className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 font-extrabold ${showUpload ? 'border border-line text-cream' : 'bg-lime text-ink'}`}>{showUpload ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{showUpload ? 'Close' : 'Add outside file'}</button>
           <button type="button" onClick={refresh} disabled={busy} aria-label="Refresh files" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line px-4 font-bold text-cream"><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /><span className="hidden sm:inline">Refresh</span></button>
         </div>
@@ -214,9 +214,9 @@ export default function FilesPanel() {
     </div>}
 
     <div className="mt-6 grid grid-cols-3 rounded-xl border border-line bg-ink p-1">
-      <button type="button" onClick={() => setView('folders')} className={`min-h-12 rounded-xl font-extrabold ${view === 'folders' ? 'bg-lime text-ink' : 'text-mute'}`}>Folders ({folders.length})</button>
-      <button type="button" onClick={() => setView('files')} className={`min-h-12 rounded-xl font-extrabold ${view === 'files' ? 'bg-cyan text-ink' : 'text-mute'}`}>Files ({files.length})</button>
-      <button type="button" onClick={() => setView('recycle')} className={`min-h-12 rounded-xl font-extrabold ${view === 'recycle' ? 'bg-pink text-white' : 'text-mute'}`}>Recycle bin ({recycled.length})</button>
+      <button type="button" onClick={() => setView('folders')} className={`min-h-12 min-w-0 rounded-xl px-1 text-xs font-extrabold sm:text-base ${view === 'folders' ? 'bg-lime text-ink' : 'text-mute'}`}>Folders ({folders.length})</button>
+      <button type="button" onClick={() => setView('files')} className={`min-h-12 min-w-0 rounded-xl px-1 text-xs font-extrabold sm:text-base ${view === 'files' ? 'bg-cyan text-ink' : 'text-mute'}`}>Files ({files.length})</button>
+      <button type="button" onClick={() => setView('recycle')} className={`min-h-12 min-w-0 rounded-xl px-1 text-xs font-extrabold sm:text-base ${view === 'recycle' ? 'bg-pink text-white' : 'text-mute'}`}>Recycle ({recycled.length})</button>
     </div>
 
     {view === 'folders' && <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
