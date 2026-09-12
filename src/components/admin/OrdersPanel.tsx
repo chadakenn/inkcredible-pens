@@ -248,6 +248,8 @@ function OrderCard({
   const [productionNotes, setProductionNotes] = useState(order.productionNotes || '')
   const [proofMessage, setProofMessage] = useState(order.proofMessage || '')
   const [workflowBusy, setWorkflowBusy] = useState(false)
+  const itemCount = order.items.reduce((total, item) => total + item.qty, 0)
+  const statusBorder = order.status === 'new' ? 'border-l-cyan' : order.status === 'making' ? 'border-l-lavender' : order.status === 'ready' ? 'border-l-amber-300' : order.status === 'shipped' ? 'border-l-lime' : 'border-l-pink'
 
   const printPackingSlip = () => {
     const popup = window.open('', '_blank', 'width=900,height=760')
@@ -273,11 +275,11 @@ function OrderCard({
   }, [order.id, order.productionNotes, order.proofMessage])
 
   return (
-    <li className="overflow-hidden rounded-3xl border border-line bg-ink-2">
+    <li className={`overflow-hidden rounded-xl border border-l-4 border-line bg-ink-2 shadow-lg shadow-black/10 transition hover:border-r-cyan/30 hover:border-t-cyan/30 ${statusBorder}`}>
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start gap-3 p-4 text-left sm:p-5"
+        className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-ink/35 sm:p-5"
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -296,19 +298,17 @@ function OrderCard({
             >
               {ORDER_STATUS_LABEL[order.status]}
             </span>
+            <span className="text-xs font-bold text-mute">{order.displayCode || order.id}</span>
             <span className="text-xs text-mute">{formatWhen(order.createdAt)} ET</span>
             <TrackingStatusChip order={order} />
+            {order.proofStatus === 'pending' && <span className="rounded-full bg-lavender/20 px-2 py-0.5 text-[11px] font-extrabold uppercase text-lavender">Proof waiting</span>}
+            {order.proofStatus === 'approved' && <span className="rounded-full bg-lime/15 px-2 py-0.5 text-[11px] font-extrabold uppercase text-lime">Proof approved</span>}
           </div>
-          <p className="mt-1 font-display text-xl text-cream">{order.customer.name}</p>
+          <p className="mt-2 font-display text-xl text-cream">{order.customer.name}</p>
           <p className="truncate text-sm text-mute">{order.customer.email}</p>
-          <p className="mt-1 text-sm font-extrabold text-lime">
-            ${order.total.toFixed(2)} · {order.items.reduce((n, i) => n + i.qty, 0)} item
-            {order.items.reduce((n, i) => n + i.qty, 0) === 1 ? '' : 's'}
-          </p>
+          <p className="mt-2 line-clamp-1 text-sm font-bold text-cream/80">{order.items.map((item) => `${item.name} ×${item.qty}`).join(' · ')}</p>
         </div>
-        <span className="mt-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-mute">
-          {expanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-        </span>
+        <div className="shrink-0 text-right"><p className="font-display text-2xl text-lime">${order.total.toFixed(2)}</p><p className="text-xs font-bold text-mute">{itemCount} item{itemCount === 1 ? '' : 's'}</p><span className="ml-auto mt-3 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-mute">{expanded ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</span></div>
       </button>
 
       {expanded && (
@@ -736,16 +736,30 @@ export default function OrdersPanel() {
   const hydrateFromApi = useOrders((s) => s.hydrateFromApi)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [view, setView] = useState<'active' | 'archive'>('active')
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all')
   const [query, setQuery] = useState('')
   const [month, setMonth] = useState('')
 
   const activeCount = orders.filter((order) => !order.archivedAt).length
   const archiveCount = orders.length - activeCount
   const sales = useMemo(() => paidSalesSummary(orders), [orders])
+  const workflowCounts = useMemo(() => {
+    const active = orders.filter((order) => !order.archivedAt)
+    return {
+      all: active.length,
+      new: active.filter((order) => order.status === 'new').length,
+      making: active.filter((order) => order.status === 'making').length,
+      ready: active.filter((order) => order.status === 'ready').length,
+      shipped: active.filter((order) => order.status === 'shipped').length,
+      cancelled: active.filter((order) => order.status === 'cancelled').length,
+      proof: active.filter((order) => order.proofStatus === 'pending').length,
+    }
+  }, [orders])
   const sorted = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return ordersNewestFirst(orders).filter((order) => {
       if (view === 'archive' ? !order.archivedAt : Boolean(order.archivedAt)) return false
+      if (view === 'active' && statusFilter !== 'all' && order.status !== statusFilter) return false
       if (month && !String(order.createdAt).startsWith(month)) return false
       if (!needle) return true
       const haystack = [
@@ -758,7 +772,7 @@ export default function OrdersPanel() {
       ].join(' ').toLowerCase()
       return haystack.includes(needle)
     })
-  }, [orders, view, query, month])
+  }, [orders, view, statusFilter, query, month])
 
   const exportArchive = () => {
     const rows = ordersNewestFirst(orders.filter((order) => order.archivedAt))
@@ -795,15 +809,14 @@ export default function OrdersPanel() {
     const requested = orders.find((order) => order.id === requestedOrder)
     if (!requested) return
     setView(requested.archivedAt ? 'archive' : 'active')
+    setStatusFilter('all')
     setExpandedId(requested.id)
   }, [orders, requestedOrder])
 
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-base text-mute">
-          Newest first from the <span className="font-bold text-cream">server</span>. Tap an order to expand, change status, or delete.
-        </p>
+        <p className="text-sm text-mute">Live fulfillment board · select a stage, then open an order to work on it.</p>
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold uppercase tracking-wide ${
             syncState === 'synced'
@@ -857,14 +870,28 @@ export default function OrdersPanel() {
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl border border-line bg-ink p-1.5">
-        <button type="button" onClick={() => { setView('active'); setExpandedId(null) }} className={`min-h-12 rounded-xl text-sm font-extrabold ${view === 'active' ? 'bg-cyan text-ink' : 'text-mute'}`}>
+      <div className="mt-5 grid grid-cols-2 gap-2 rounded-xl border border-line bg-ink p-1.5">
+        <button type="button" onClick={() => { setView('active'); setStatusFilter('all'); setExpandedId(null) }} className={`min-h-12 rounded-lg text-sm font-extrabold ${view === 'active' ? 'bg-cyan text-ink' : 'text-mute'}`}>
           Active orders ({activeCount})
         </button>
-        <button type="button" onClick={() => { setView('archive'); setExpandedId(null) }} className={`min-h-12 rounded-xl text-sm font-extrabold ${view === 'archive' ? 'bg-lime text-ink' : 'text-mute'}`}>
+        <button type="button" onClick={() => { setView('archive'); setStatusFilter('all'); setExpandedId(null) }} className={`min-h-12 rounded-lg text-sm font-extrabold ${view === 'archive' ? 'bg-lime text-ink' : 'text-mute'}`}>
           Completed archive ({archiveCount})
         </button>
       </div>
+
+      {view === 'active' && <>
+        {workflowCounts.proof > 0 && <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-lavender/40 bg-lavender/10 px-4 py-3"><div><p className="font-extrabold text-lavender">{workflowCounts.proof} proof{workflowCounts.proof === 1 ? '' : 's'} waiting for customer approval</p><p className="text-xs text-mute">Open the order to review or resend the proof.</p></div><Send className="h-5 w-5 shrink-0 text-lavender" /></div>}
+        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {([
+            ['all', 'All', workflowCounts.all, 'text-cream'],
+            ['new', 'New', workflowCounts.new, 'text-cyan'],
+            ['making', 'Making', workflowCounts.making, 'text-lavender'],
+            ['ready', 'Ready', workflowCounts.ready, 'text-amber-200'],
+            ['shipped', 'Shipped', workflowCounts.shipped, 'text-lime'],
+            ['cancelled', 'Cancelled', workflowCounts.cancelled, 'text-pink'],
+          ] as const).map(([id, label, count, color]) => <button key={id} type="button" onClick={() => { setStatusFilter(id); setExpandedId(null) }} className={`min-h-24 rounded-xl border p-3 text-left transition ${statusFilter === id ? 'border-cyan bg-cyan/10 shadow-lg shadow-cyan/10' : 'border-line bg-ink-2 hover:border-cyan/40'}`}><p className={`font-display text-3xl ${color}`}>{count}</p><p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-mute">{label}</p></button>)}
+        </div>
+      </>}
 
       <div className="mt-3 grid items-end gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
         <label>
@@ -878,15 +905,15 @@ export default function OrdersPanel() {
           <span className="mb-1 block text-xs font-extrabold uppercase tracking-wider text-mute">Order month</span>
           <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="min-h-12 min-w-44 rounded-xl border border-line bg-ink px-3 text-sm text-cream [color-scheme:dark] outline-none focus:border-cyan" />
         </label>
-        {(query || month) && (
-          <button type="button" onClick={() => { setQuery(''); setMonth('') }} className="min-h-12 rounded-xl border border-line bg-ink px-4 text-sm font-extrabold text-cream hover:border-cyan">
+        {(query || month || statusFilter !== 'all') && (
+          <button type="button" onClick={() => { setQuery(''); setMonth(''); setStatusFilter('all') }} className="min-h-12 rounded-xl border border-line bg-ink px-4 text-sm font-extrabold text-cream hover:border-cyan">
             Clear filters
           </button>
         )}
         {view === 'archive' && <button type="button" onClick={exportArchive} disabled={archiveCount === 0} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-lime/40 bg-lime/10 px-4 text-sm font-extrabold text-lime disabled:opacity-40"><FileDown className="h-4 w-4" /> Export CSV</button>}
       </div>
 
-      {(query || month) && <p className="mt-2 text-sm text-mute">Showing {sorted.length} matching order{sorted.length === 1 ? '' : 's'}.</p>}
+      {(query || month || statusFilter !== 'all') && <p className="mt-3 text-sm font-bold text-mute">Showing {sorted.length} matching order{sorted.length === 1 ? '' : 's'}.</p>}
 
       {sorted.length === 0 ? (
         <div className="mt-6 rounded-3xl border border-dashed border-line bg-ink-2 px-6 py-16 text-center">
