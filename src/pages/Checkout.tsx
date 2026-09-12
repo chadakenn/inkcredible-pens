@@ -13,6 +13,7 @@ import { useOrders } from '../store/orders'
 import ProductArt from '../components/ProductArt'
 import LogoMark from '../components/LogoMark'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { trackBeginCheckout, trackPurchase } from '../lib/analytics'
 
 function PaymentIcons() {
   const labels = ['Visa', 'MC', 'Amex', 'Discover', 'Cash App', 'GPay']
@@ -207,6 +208,7 @@ export default function Checkout() {
 
     const finishPaid = (id: string) => {
       if (cancelled) return
+      trackPurchase(id, regularItems, regularSubtotal, shippingEstimate)
       setOrderId(id)
       setStripePaid(true)
       setPendingConfirmation(false)
@@ -407,6 +409,7 @@ export default function Checkout() {
         setPayError(data.error || `Checkout failed (${res.status})`)
         return
       }
+      trackBeginCheckout(regularItems, regularSubtotal)
       window.location.href = data.url
     } catch {
       setPayError(

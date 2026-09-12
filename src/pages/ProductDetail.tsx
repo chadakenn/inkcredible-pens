@@ -11,6 +11,7 @@ import ProductCard from '../components/ProductCard'
 import FavoriteButton from '../components/FavoriteButton'
 import ImageLightbox from '../components/ImageLightbox'
 import { pathForCustomProduct } from '../store/shop'
+import { trackProductView } from '../lib/analytics'
 
 const CATEGORY_PATH: Record<string, string> = {
   Pens: '/pens',
@@ -57,8 +58,11 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (configuratorPath) return
-    if (product?.id) track(product.id)
-  }, [product?.id, track, configuratorPath])
+    if (product?.id) {
+      track(product.id)
+      trackProductView(product)
+    }
+  }, [product, track, configuratorPath])
 
   useEffect(() => {
     if (configuratorPath || !isFreshie) return

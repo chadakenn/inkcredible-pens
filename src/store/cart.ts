@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Product } from '../data/products'
 import { isUniqueCustomLine } from '../lib/customCartMeta'
+import { trackAddToCart } from '../lib/analytics'
 
 export interface CartItem {
   product: Product
@@ -98,6 +99,7 @@ export const useCart = create<CartState>()(
           const available = lineProduct.inventoryQuantity
           const safeQty = available == null ? qty : Math.min(qty, available)
           if (safeQty <= 0) return { ...s, toast: 'This item is sold out' }
+          trackAddToCart(lineProduct, safeQty)
           // Custom logo lines always get their own cart row (unique ids expected)
           if (isLogoCustomLine(lineProduct)) {
             return {
