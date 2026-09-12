@@ -6,6 +6,7 @@ import {
   Plus,
   Trash2,
   RotateCcw,
+  RefreshCw,
   ArrowLeft,
   Package,
   Droplets,
@@ -1276,12 +1277,12 @@ export default function Admin() {
       )}
 
       {!showAccounts && tab === 'scents' && (
-        <div className="mt-8 rounded-3xl border border-cyan/30 bg-ink-2 p-5 sm:p-6">
-          <h2 className="font-display text-2xl text-cream">Freshie scents</h2>
-          <p className="mt-2 text-base text-mute">
-            These show up as big scent buttons when someone buys a Car Freshie. The list is stored on the server so phone and laptop stay in sync.
-          </p>
-          <p className="mt-3 flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase tracking-wide">
+        <div className="space-y-5">
+          <section className="flex flex-col gap-4 rounded-xl border border-line bg-ink-2 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-cyan/10 text-cyan"><Droplets className="h-7 w-7" /></span><div><h2 className="font-display text-2xl text-cream">Freshie scent menu</h2><p className="mt-1 text-sm text-mute">Every scent here appears as a customer choice on Car Freshies.</p></div></div>
+            <div className="flex items-center gap-3 rounded-xl border border-line bg-ink px-4 py-3"><div><p className="text-xs font-extrabold uppercase text-mute">Available now</p><p className="font-display text-2xl text-cream">{scents.length} scents</p></div></div>
+          </section>
+          <div className="flex flex-wrap items-center gap-2 text-xs font-extrabold uppercase tracking-wide">
             <span
               className={`rounded-full px-2.5 py-0.5 ${
                 scentsSyncState === 'synced'
@@ -1301,25 +1302,25 @@ export default function Admin() {
             <button
               type="button"
               onClick={() => void hydrateScents()}
-              className="rounded-xl border border-line bg-ink px-2.5 py-1 text-mute hover:text-cream"
+              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-line bg-ink px-3 text-mute hover:text-cream"
             >
-              Refresh
+              <RefreshCw className={`h-4 w-4 ${scentsSyncState === 'loading' ? 'animate-spin' : ''}`} /> Refresh
             </button>
-          </p>
+          </div>
           {scentsSyncError && (
             <p className="mt-2 text-sm text-pink">{scentsSyncError}</p>
           )}
-          <p className="mt-3 rounded-2xl border border-amber-300/40 bg-amber-300/10 px-4 py-3 text-sm font-extrabold text-amber-200">
+          <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-200">
             Starter seed on first boot — replace with what’s in stock.
           </p>
 
           {justScent && (
-            <p className="mt-4 rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm font-bold text-lime">
+            <p className="rounded-xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm font-bold text-lime">
               “{justScent}” is available for freshies now.
             </p>
           )}
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <div className="rounded-xl border border-line bg-ink-2 p-5"><div className="mb-4"><h3 className="font-display text-xl text-cream">Add a scent</h3><p className="text-sm text-mute">Type the name exactly how customers should see it.</p></div><div className="flex flex-col gap-3 sm:flex-row">
             <input
               value={newScent}
               onChange={(e) => {
@@ -1333,12 +1334,12 @@ export default function Admin() {
                 }
               }}
               placeholder="New scent name"
-              className="min-h-14 flex-1 rounded-2xl border border-line bg-ink px-4 text-lg font-bold text-cream outline-none placeholder:text-mute focus:border-cyan"
+              className="min-h-12 flex-1 rounded-xl border border-line bg-ink px-4 text-base font-bold text-cream outline-none placeholder:text-mute focus:border-cyan"
             />
             <button
               type="button"
               onClick={onAddScent}
-              className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-lime px-5 text-lg font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99]"
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-lime px-5 text-base font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99]"
             >
               <Plus className="h-5 w-5" />
               Add scent
@@ -1347,15 +1348,16 @@ export default function Admin() {
           {scentError && (
             <p className="mt-2 text-sm font-bold text-pink">{scentError}</p>
           )}
+          </div>
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <button
               type="button"
               onClick={() => {
                 setConfirmResetScents(true)
                 setConfirmClearScents(false)
               }}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line bg-ink px-4 text-sm font-extrabold text-cream hover:border-cyan/50"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-line bg-ink px-4 text-sm font-bold text-mute hover:border-cyan/50 hover:text-cream"
             >
               <RotateCcw className="h-4 w-4 text-cyan" />
               Restore starter scents
@@ -1367,7 +1369,7 @@ export default function Admin() {
                 setConfirmResetScents(false)
               }}
               disabled={scents.length === 0}
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-pink/50 bg-ink px-4 text-sm font-extrabold text-pink hover:bg-pink/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-pink/40 bg-ink px-4 text-sm font-bold text-pink hover:bg-pink/10 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Trash2 className="h-4 w-4" />
               Clear all scents
@@ -1446,7 +1448,7 @@ export default function Admin() {
             </div>
           )}
 
-          <ul className="mt-5 space-y-3">
+          <div className="rounded-xl border border-line bg-ink-2 p-5"><div><h3 className="font-display text-xl text-cream">Available scents</h3><p className="text-sm text-mute">Rename a scent or remove one that is no longer offered.</p></div><ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {scents.length === 0 && (
               <li className="rounded-2xl border border-line bg-ink px-4 py-5 text-sm text-mute">
                 No scents yet — add one above so customers can pick.
@@ -1455,7 +1457,7 @@ export default function Admin() {
             {scents.map((s) => (
               <li
                 key={s}
-                className="rounded-2xl border border-line bg-ink p-4 sm:p-5"
+                className="rounded-xl border border-line bg-ink p-4 transition-colors hover:border-cyan/40"
               >
                 {editingScent === s ? (
                   <div className="flex flex-col gap-3">
@@ -1533,8 +1535,8 @@ export default function Admin() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="font-display text-xl leading-snug text-cream">{s}</p>
+                  <div className="flex h-full flex-col gap-3">
+                    <div className="flex-1"><span className="rounded-full bg-lime/10 px-2 py-1 text-[10px] font-extrabold uppercase text-lime">Customer-facing</span><p className="mt-2 font-display text-xl leading-snug text-cream">{s}</p></div>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -1543,9 +1545,9 @@ export default function Admin() {
                           setEditScentValue(s)
                           setConfirmDeleteScent(null)
                         }}
-                        className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line bg-ink-2 px-4 text-base font-extrabold text-cream hover:border-cyan/50"
+                        className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-line bg-ink-2 px-3 text-sm font-bold text-cream hover:border-cyan/50"
                       >
-                        Rename
+                        <Pencil className="h-4 w-4 text-cyan" /> Rename
                       </button>
                       <button
                         type="button"
@@ -1553,7 +1555,7 @@ export default function Admin() {
                           setConfirmDeleteScent(s)
                           setEditingScent(null)
                         }}
-                        className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-pink/90 px-4 text-base font-extrabold text-white transition hover:bg-pink active:scale-[0.98]"
+                        className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-pink/40 px-3 text-sm font-bold text-pink transition hover:bg-pink/10 active:scale-[0.98]"
                       >
                         <Trash2 className="h-4 w-4" />
                         Delete
@@ -1563,7 +1565,7 @@ export default function Admin() {
                 )}
               </li>
             ))}
-          </ul>
+          </ul></div>
         </div>
       )}
 
