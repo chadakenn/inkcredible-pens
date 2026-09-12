@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   FileText,
   FolderOpen,
+  Store,
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
@@ -334,6 +335,7 @@ export default function Admin() {
   }, [])
 
   const setTab = (next: AdminTab) => {
+    setShowAccounts(false)
     const nextParams = new URLSearchParams()
     nextParams.set('tab', next)
     if (next === 'products' && productType !== 'All') {
@@ -611,48 +613,41 @@ export default function Admin() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-sm font-bold text-mute hover:text-cyan"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to shop
-        </Link>
-        <button
-          type="button"
-          onClick={lock}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-ink-2 px-4 text-sm font-bold text-mute hover:text-cream"
-        >
-          <Lock className="h-4 w-4" />
-          Lock
-        </button>
-      </div>
+    <div className="mx-auto max-w-[1480px] px-3 py-4 sm:px-6 sm:py-6">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-line bg-ink-2 px-4 py-4 shadow-2xl shadow-black/20 sm:px-6">
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-lime text-ink"><Store className="h-6 w-6" /></span>
+          <div><p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan">Inkcredible</p><h1 className="font-display text-2xl text-cream sm:text-3xl">Store Manager</h1></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="hidden text-right sm:block"><p className="text-sm font-bold text-cream">{adminUser?.displayName || adminUser?.username}</p><p className="text-xs text-mute">Manager account</p></div>
+          <Link to="/" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink px-3 text-sm font-bold text-mute hover:border-cyan hover:text-cream"><ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">View shop</span></Link>
+          <button type="button" onClick={lock} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink px-3 text-sm font-bold text-mute hover:border-pink hover:text-cream"><Lock className="h-4 w-4" /> Lock</button>
+        </div>
+      </header>
 
-      <h1 className="font-display text-3xl text-cream sm:text-4xl">Store Manager</h1>
-      <p className="mt-2 max-w-xl text-base text-mute">
-        Products, freshie scents, and orders — all in one place. Catalog, scents, and orders sync from the server.
-      </p>
+      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+        <aside className="sticky top-3 z-20 rounded-2xl border border-line bg-ink-2 p-2 shadow-xl shadow-black/20">
+          <p className="hidden px-3 pb-2 pt-3 text-xs font-extrabold uppercase tracking-[0.18em] text-mute lg:block">Workspace</p>
+          <nav aria-label="Store manager sections" className="grid grid-cols-3 gap-1 sm:grid-cols-6 lg:grid-cols-1">
+            {TABS.map(({ id, label, icon: Icon }) => {
+              const on = tab === id && !showAccounts
+              return <button key={id} type="button" onClick={() => setTab(id)} aria-current={on ? 'page' : undefined} className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 text-sm font-extrabold transition lg:justify-start lg:px-4 ${on ? 'bg-cyan text-ink shadow-[0_0_18px_rgba(34,211,238,0.25)]' : 'text-mute hover:bg-ink hover:text-cream'}`}><Icon className="h-5 w-5 shrink-0" /><span>{label}</span></button>
+            })}
+          </nav>
+          <div className="mt-2 border-t border-line pt-2">
+            <button type="button" onClick={() => { setShowAccounts((open) => { if (!open) refreshAdminUsers(); return !open }); setAccountError(null) }} className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-3 text-sm font-extrabold lg:justify-start ${showAccounts ? 'bg-lavender text-ink' : 'text-mute hover:bg-ink hover:text-cream'}`}><KeyRound className="h-5 w-5" /> Accounts</button>
+          </div>
+        </aside>
 
-      <div className="mt-4">
-        <button
-          type="button"
-          onClick={() => {
-            setShowAccounts((open) => {
-              if (!open) refreshAdminUsers()
-              return !open
-            })
-            setAccountError(null)
-          }}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-ink-2 px-4 text-sm font-bold text-mute hover:text-cream"
-        >
-          <KeyRound className="h-4 w-4 text-cyan" />
-          {showAccounts ? 'Hide accounts' : 'Accounts & password'}
-        </button>
+        <main className="min-w-0 rounded-2xl border border-line/80 bg-black/10 p-3 sm:p-5 lg:p-6">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-3 border-b border-line pb-5">
+            <div><p className="text-xs font-extrabold uppercase tracking-[0.18em] text-lime">Manager workspace</p><h2 className="mt-1 font-display text-3xl text-cream">{showAccounts ? 'Accounts & security' : TABS.find((item) => item.id === tab)?.label}</h2><p className="mt-1 text-sm text-mute">{showAccounts ? 'Manage who can access the store.' : tab === 'dashboard' ? 'A quick look at what needs your attention.' : `Manage store ${TABS.find((item) => item.id === tab)?.label.toLowerCase()}.`}</p></div>
+          </div>
 
+        <div>
         {showAccounts && (
-          <div className="mt-4 space-y-5 rounded-3xl border border-line bg-ink-2 p-5 sm:p-6">
+          <div className="space-y-5 rounded-2xl border border-line bg-ink-2 p-5 sm:p-6">
             <div>
               <h2 className="font-display text-2xl text-cream">Store Manager accounts</h2>
               <p className="mt-1 text-sm text-mute">Signed in as {adminUser?.displayName || adminUser?.username}.</p>
@@ -685,36 +680,11 @@ export default function Admin() {
         )}
       </div>
 
-      <nav
-        aria-label="Store manager sections"
-        className="mt-6 grid grid-cols-2 gap-2 rounded-2xl border border-line bg-ink-2 p-1.5 sm:grid-cols-5"
-      >
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const on = tab === id
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              aria-current={on ? 'page' : undefined}
-              className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 text-sm font-extrabold transition active:scale-[0.98] sm:flex-row sm:gap-2 sm:text-base ${
-                on
-                  ? 'bg-cyan text-ink shadow-[0_0_20px_rgba(34,211,238,0.45)]'
-                  : 'text-mute hover:bg-ink hover:text-cream'
-              }`}
-            >
-              <Icon className="h-5 w-5" />
-              {label}
-            </button>
-          )
-        })}
-      </nav>
+      {!showAccounts && tab === 'dashboard' && <ManagerDashboard onOpenOrders={() => setTab('orders')} onOpenOrder={openOrder} onNavigate={setTab} />}
+      {!showAccounts && tab === 'quotes' && <QuotesPanel />}
+      {!showAccounts && tab === 'files' && <FilesPanel />}
 
-      {tab === 'dashboard' && <div className="mt-8"><ManagerDashboard onOpenOrders={() => setTab('orders')} onOpenOrder={openOrder} /></div>}
-      {tab === 'quotes' && <div className="mt-8"><QuotesPanel /></div>}
-      {tab === 'files' && <div className="mt-8"><FilesPanel /></div>}
-
-      {tab === 'products' && (
+      {!showAccounts && tab === 'products' && (
         <div className="mt-8">
           {justAdded && (
             <p className="mb-4 rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm font-bold text-lime">
@@ -1287,7 +1257,7 @@ export default function Admin() {
         </div>
       )}
 
-      {tab === 'scents' && (
+      {!showAccounts && tab === 'scents' && (
         <div className="mt-8 rounded-3xl border border-cyan/30 bg-ink-2 p-5 sm:p-6">
           <h2 className="font-display text-2xl text-cream">Freshie scents</h2>
           <p className="mt-2 text-base text-mute">
@@ -1579,11 +1549,13 @@ export default function Admin() {
         </div>
       )}
 
-      {tab === 'orders' && (
-        <div className="mt-8">
+      {!showAccounts && tab === 'orders' && (
+        <div>
           <OrdersPanel />
         </div>
       )}
+        </main>
+      </div>
     </div>
   )
 }

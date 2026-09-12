@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ClipboardList, Download, PackageCheck, RefreshCw, Sparkles, Truck } from 'lucide-react'
+import { ArrowRight, ClipboardList, Download, Droplets, FileText, FolderOpen, Package, PackageCheck, RefreshCw, Sparkles, Truck } from 'lucide-react'
 import { paidSalesSummary } from '../../lib/salesSummary'
 import { activeOrderCounts, currentEasternMonth, monthlySalesReport } from '../../lib/managerReports'
 import { ORDER_STATUS_LABEL, ordersNewestFirst, useOrders } from '../../store/orders'
@@ -9,9 +9,11 @@ const money = (value: number) => value.toLocaleString('en-US', { style: 'currenc
 export default function ManagerDashboard({
   onOpenOrders,
   onOpenOrder,
+  onNavigate,
 }: {
   onOpenOrders: () => void
   onOpenOrder: (id: string) => void
+  onNavigate: (tab: 'quotes' | 'files' | 'products' | 'scents') => void
 }) {
   const orders = useOrders((state) => state.orders)
   const hydrateFromApi = useOrders((state) => state.hydrateFromApi)
@@ -55,19 +57,30 @@ export default function ManagerDashboard({
     { label: 'Shipped', count: counts.shipped, color: 'text-lime border-lime/40 bg-lime/10', icon: Truck },
   ]
 
-  return <div className="space-y-6">
+  const quickLinks = [
+    { label: 'Review quotes', detail: 'Price and send custom jobs', tab: 'quotes' as const, icon: FileText, color: 'text-lavender' },
+    { label: 'Customer files', detail: 'Artwork, folders, and downloads', tab: 'files' as const, icon: FolderOpen, color: 'text-cyan' },
+    { label: 'Edit products', detail: 'Listings, prices, and photos', tab: 'products' as const, icon: Package, color: 'text-lime' },
+    { label: 'Freshie scents', detail: 'Keep available scents current', tab: 'scents' as const, icon: Droplets, color: 'text-pink' },
+  ]
+
+  return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="font-display text-3xl text-cream">Manager Dashboard</h2><p className="mt-1 text-sm text-mute">What needs attention right now.</p></div>
+      <div><h3 className="font-display text-2xl text-cream">Today at a glance</h3><p className="mt-1 text-sm text-mute">Live order counts from the server.</p></div>
       <button type="button" onClick={() => void hydrateFromApi()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line bg-ink-2 px-4 text-sm font-extrabold text-cream">
         <RefreshCw className={`h-4 w-4 ${syncState === 'loading' ? 'animate-spin' : ''}`} /> Refresh
       </button>
     </div>
 
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      {statusCards.map(({ label, count, color, icon: Icon }) => <button key={label} type="button" onClick={onOpenOrders} className={`rounded-2xl border p-4 text-left ${color}`}><Icon className="h-5 w-5" /><p className="mt-3 font-display text-3xl text-cream">{count}</p><p className="text-sm font-extrabold">{label}</p></button>)}
+    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      {statusCards.map(({ label, count, color, icon: Icon }) => <button key={label} type="button" onClick={onOpenOrders} className={`group aspect-[1.15/1] min-h-32 rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-xl ${color}`}><div className="flex items-start justify-between"><Icon className="h-6 w-6" /><ArrowRight className="h-4 w-4 opacity-40 transition group-hover:translate-x-1 group-hover:opacity-100" /></div><p className="mt-4 font-display text-4xl text-cream">{count}</p><p className="text-sm font-extrabold">{label}</p></button>)}
     </div>
 
-    <section className="rounded-3xl border border-line bg-ink-2 p-5 sm:p-6">
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {quickLinks.map(({ label, detail, tab, icon: Icon, color }) => <button key={tab} type="button" onClick={() => onNavigate(tab)} className="group min-h-28 rounded-xl border border-line bg-ink-2 p-4 text-left transition hover:border-cyan/50 hover:bg-ink"><Icon className={`h-6 w-6 ${color}`} /><p className="mt-3 font-extrabold text-cream">{label}</p><p className="mt-1 text-xs text-mute">{detail}</p></button>)}
+    </section>
+
+    <section className="rounded-xl border border-line bg-ink-2 p-5 sm:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><h3 className="font-display text-2xl text-cream">Monthly sales report</h3><p className="mt-1 text-sm text-mute">Paid Stripe orders only.</p></div>
         <div className="flex flex-wrap items-end gap-2">
@@ -84,7 +97,7 @@ export default function ManagerDashboard({
       <p className="mt-4 text-sm text-mute">Lifetime paid sales: <strong className="text-cream">{money(lifetime.total)}</strong> across {lifetime.paidOrders} orders.</p>
     </section>
 
-    <section className="rounded-3xl border border-line bg-ink-2 p-5 sm:p-6">
+    <section className="rounded-xl border border-line bg-ink-2 p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3"><div><h3 className="font-display text-2xl text-cream">Recent active orders</h3><p className="mt-1 text-sm text-mute">Tap one to open the full order.</p></div><button type="button" onClick={onOpenOrders} className="min-h-11 rounded-xl border border-line bg-ink px-4 text-sm font-extrabold text-cyan">View all</button></div>
       {recent.length ? <ul className="mt-4 space-y-2">{recent.map((order) => <li key={order.id}><button type="button" onClick={() => onOpenOrder(order.id)} className="flex min-h-14 w-full items-center justify-between gap-4 rounded-2xl border border-line bg-ink px-4 text-left hover:border-cyan/50"><span><strong className="block text-cream">{order.customer.name}</strong><span className="text-xs text-mute">{order.displayCode || order.id} · {ORDER_STATUS_LABEL[order.status]}</span></span><span className="font-display text-lime">{money(order.total)}</span></button></li>)}</ul> : <p className="mt-4 rounded-2xl border border-dashed border-line p-6 text-center text-mute">No active orders.</p>}
     </section>
