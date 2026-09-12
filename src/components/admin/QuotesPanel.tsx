@@ -1,9 +1,35 @@
 import { useEffect, useState } from 'react'
 import { Download, Mail, RefreshCw } from 'lucide-react'
 import { fetchQuotes, sendQuotePayment, type QuoteRequest } from '../../lib/quotesApi'
-import { downloadAdminArtwork } from '../../lib/uploadCustomArtwork'
+import { downloadAdminArtwork, fetchAdminArtworkObjectUrl } from '../../lib/uploadCustomArtwork'
 
 const money = (value: number) => value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+
+function ArtworkPreview({ url, fileName }: { url: string; fileName: string }) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let active = true
+    let objectUrl: string | null = null
+    setFailed(false)
+    void fetchAdminArtworkObjectUrl(url)
+      .then((next) => {
+        objectUrl = next
+        if (active) setSrc(next)
+        else URL.revokeObjectURL(next)
+      })
+      .catch(() => { if (active) setFailed(true) })
+    return () => {
+      active = false
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [url])
+
+  if (failed) return <p className="mt-3 rounded-xl border border-line bg-ink-2 p-4 text-sm text-mute">Preview unavailable for {fileName}. Download the original to review it.</p>
+  return <div className="mt-3 flex min-h-48 items-center justify-center overflow-hidden rounded-2xl border border-line bg-[linear-gradient(45deg,#202026_25%,transparent_25%),linear-gradient(-45deg,#202026_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#202026_75%),linear-gradient(-45deg,transparent_75%,#202026_75%)] bg-[length:20px_20px] bg-[position:0_0,0_10px,10px_-10px,-10px_0px] p-3">
+    {src ? <img src={src} alt={`Customer artwork: ${fileName}`} className="max-h-96 w-full object-contain" /> : <p className="text-sm font-bold text-mute">Loading artwork preview…</p>}
+  </div>
+}
 
 export default function QuotesPanel() {
   const [quotes, setQuotes] = useState<QuoteRequest[]>([])
@@ -87,7 +113,10 @@ export default function QuotesPanel() {
               <strong className="text-cream">{item.name} × {item.qty}</strong>
               {item.custom?.bannerNotes && <p className="text-xs text-mute">Notes: {item.custom.bannerNotes}</p>}
               {item.custom?.canvasNotes && <p className="text-xs text-mute">Notes: {item.custom.canvasNotes}</p>}
-              {item.custom?.artworkUrl && <button type="button" onClick={() => void downloadAdminArtwork(item.custom!.artworkUrl!, item.custom?.artworkFileName || item.custom?.fileName || 'artwork')} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-cyan"><Download className="h-3 w-3" /> Download artwork</button>}
+              {item.custom?.artworkUrl && <>
+                <ArtworkPreview url={item.custom.artworkUrl} fileName={item.custom.artworkFileName || item.custom.fileName || 'artwork'} />
+                <button type="button" onClick={() => void downloadAdminArtwork(item.custom!.artworkUrl!, item.custom?.artworkFileName || item.custom?.fileName || 'artwork')} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl bg-cyan px-4 text-sm font-extrabold text-ink"><Download className="h-4 w-4" /> Download original artwork</button>
+              </>}
             </li>)}
           </ul>
 
