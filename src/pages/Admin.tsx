@@ -19,6 +19,9 @@ import {
   FileText,
   FolderOpen,
   Store,
+  ShieldCheck,
+  UserPlus,
+  Users,
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
@@ -647,27 +650,33 @@ export default function Admin() {
 
         <div>
         {showAccounts && (
-          <div className="space-y-5 rounded-2xl border border-line bg-ink-2 p-5 sm:p-6">
-            <div>
-              <h2 className="font-display text-2xl text-cream">Store Manager accounts</h2>
-              <p className="mt-1 text-sm text-mute">Signed in as {adminUser?.displayName || adminUser?.username}.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {adminUsers.map((user) => <span key={user.id} className="rounded-full border border-line bg-ink px-3 py-1.5 text-sm font-bold text-cream">{user.displayName} <span className="text-mute">@{user.username}</span></span>)}
-              </div>
+          <div className="space-y-5">
+            <div className="flex flex-col gap-4 rounded-xl border border-lime/30 bg-lime/5 p-5 sm:flex-row sm:items-center">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-lime/15 text-lime"><ShieldCheck className="h-7 w-7" /></span>
+              <div className="flex-1"><h2 className="font-display text-2xl text-cream">Store Manager is protected</h2><p className="mt-1 text-sm text-mute">Signed in securely as <strong className="text-cream">{adminUser?.displayName || adminUser?.username}</strong>. Each manager should use their own account.</p></div>
+              <span className="w-fit rounded-full bg-lime/15 px-3 py-1.5 text-xs font-extrabold uppercase text-lime">Secure session active</span>
             </div>
 
-            <form onSubmit={createAccount} className="space-y-3 rounded-2xl border border-line bg-ink p-4">
-              <h3 className="font-display text-xl text-cream">Add Kellie or another manager</h3>
+            <section className="rounded-xl border border-line bg-ink-2 p-5">
+              <div className="flex items-center gap-3"><Users className="h-6 w-6 text-cyan" /><div><h3 className="font-display text-xl text-cream">People with access</h3><p className="text-sm text-mute">{adminUsers.length} manager {adminUsers.length === 1 ? 'account' : 'accounts'}</p></div></div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {adminUsers.map((user) => <div key={user.id} className="flex items-center gap-3 rounded-xl border border-line bg-ink p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan/10 font-display text-lg uppercase text-cyan">{user.displayName.charAt(0) || user.username.charAt(0)}</span><div className="min-w-0"><p className="truncate font-bold text-cream">{user.displayName}</p><p className="truncate text-xs text-mute">@{user.username}{user.id === adminUser?.id ? ' · You' : ''}</p></div></div>)}
+              </div>
+            </section>
+
+            <div className="grid gap-5 xl:grid-cols-2">
+            <form onSubmit={createAccount} className="space-y-3 rounded-xl border border-line bg-ink-2 p-5">
+              <div className="flex items-center gap-3"><UserPlus className="h-6 w-6 text-cyan" /><div><h3 className="font-display text-xl text-cream">Add a manager</h3><p className="text-sm text-mute">Create a separate login for Kellie or another helper.</p></div></div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <input required value={newAccountName} onChange={(e) => setNewAccountName(e.target.value)} placeholder="Name" aria-label="New manager name" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
                 <input required autoCapitalize="none" value={newAccountUsername} onChange={(e) => setNewAccountUsername(e.target.value)} placeholder="Username" aria-label="New manager username" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
               </div>
               <input required type="password" minLength={10} autoComplete="new-password" value={newAccountPassword} onChange={(e) => setNewAccountPassword(e.target.value)} placeholder="Temporary password (10+ characters)" aria-label="New manager password" className="min-h-12 w-full rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
-              <button type="submit" className="min-h-12 w-full rounded-xl bg-cyan px-4 text-base font-extrabold text-ink">Add account</button>
+              <button type="submit" className="min-h-12 w-full rounded-xl bg-cyan px-4 text-base font-extrabold text-ink">Create manager account</button>
             </form>
 
-            <form onSubmit={updatePassword} className="space-y-3 rounded-2xl border border-line bg-ink p-4">
-              <h3 className="font-display text-xl text-cream">Change my password</h3>
+            <form onSubmit={updatePassword} className="space-y-3 rounded-xl border border-line bg-ink-2 p-5">
+              <div className="flex items-center gap-3"><KeyRound className="h-6 w-6 text-lime" /><div><h3 className="font-display text-xl text-cream">Change my password</h3><p className="text-sm text-mute">Use at least 10 characters. Longer is safer.</p></div></div>
               <input required type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Current password" className="min-h-12 w-full rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
               <div className="grid gap-3 sm:grid-cols-2">
                 <input required type="password" minLength={10} autoComplete="new-password" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} placeholder="New password" className="min-h-12 rounded-xl border border-line bg-ink-2 px-3 text-base text-cream outline-none placeholder:text-mute focus:border-cyan" />
@@ -675,7 +684,8 @@ export default function Admin() {
               </div>
               <button type="submit" className="min-h-12 w-full rounded-xl bg-lime px-4 text-base font-extrabold text-ink">Change password</button>
             </form>
-            {accountError && <p role="alert" className="text-sm font-bold text-pink">{accountError}</p>}
+            </div>
+            {accountError && <p role="alert" className="rounded-xl border border-pink/40 bg-pink/10 px-4 py-3 text-sm font-bold text-pink">{accountError}</p>}
           </div>
         )}
       </div>
@@ -685,12 +695,19 @@ export default function Admin() {
       {!showAccounts && tab === 'files' && <FilesPanel />}
 
       {!showAccounts && tab === 'products' && (
-        <div className="mt-8">
+        <div>
           {justAdded && (
             <p className="mb-4 rounded-2xl border border-lime/40 bg-lime/10 px-4 py-3 text-sm font-bold text-lime">
               “{justAdded}” is in the shop now. Nice!
             </p>
           )}
+
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-line bg-ink-2 p-4"><Package className="h-5 w-5 text-cyan" /><p className="mt-2 text-xs font-bold uppercase text-mute">Shop products</p><p className="font-display text-2xl text-cream">{products.length}</p></div>
+            <div className="rounded-xl border border-line bg-ink-2 p-4"><Store className="h-5 w-5 text-lime" /><p className="mt-2 text-xs font-bold uppercase text-mute">Categories</p><p className="font-display text-2xl text-cream">{CATEGORIES.filter((category) => products.some((product) => product.category === category)).length}</p></div>
+            <div className="rounded-xl border border-line bg-ink-2 p-4"><RotateCcw className="h-5 w-5 text-amber-300" /><p className="mt-2 text-xs font-bold uppercase text-mute">Made to order</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.inventoryQuantity == null).length}</p></div>
+            <div className="rounded-xl border border-line bg-ink-2 p-4"><Trash2 className="h-5 w-5 text-pink" /><p className="mt-2 text-xs font-bold uppercase text-mute">Sold out</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.inventoryQuantity === 0).length}</p></div>
+          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
@@ -702,7 +719,7 @@ export default function Admin() {
                 setEditForm(null)
                 setEditSaveError(null)
               }}
-              className="flex min-h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-lime px-5 text-lg font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99]"
+              className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-lime px-5 text-base font-extrabold text-ink transition hover:bg-lime-hot active:scale-[0.99]"
             >
               <Plus className="h-5 w-5" />
               {showForm ? 'Hide form' : 'Add a product'}
@@ -713,7 +730,7 @@ export default function Admin() {
                 setConfirmReset(true)
                 setShowForm(false)
               }}
-              className="flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-line bg-ink-2 px-5 text-base font-extrabold text-cream transition hover:border-cyan/50"
+              className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-pink/30 bg-ink-2 px-5 text-sm font-bold text-mute transition hover:border-pink/60 hover:text-cream"
             >
               <RotateCcw className="h-5 w-5 text-cyan" />
               Restore original products
@@ -1153,11 +1170,11 @@ export default function Admin() {
                       </span>
                     </h3>
                   ) : null}
-                  <ul className="space-y-3">
+                  <ul className="grid gap-3 xl:grid-cols-2">
                     {items.map((p) => (
                       <li
                         key={p.id}
-                        className={`rounded-2xl border p-4 sm:p-5 ${
+                        className={`rounded-xl border p-4 ${
                           editForm?.id === p.id
                             ? 'border-cyan/50 bg-ink-2'
                             : 'border-line bg-ink-2'
@@ -1169,7 +1186,7 @@ export default function Admin() {
                               <img
                                 src={p.imageUrl}
                                 alt=""
-                                className="h-14 w-14 shrink-0 rounded-xl border border-line bg-white object-cover"
+                                className="h-20 w-20 shrink-0 rounded-xl border border-line bg-white object-contain"
                               />
                             ) : null}
                             <div className="min-w-0">
@@ -1177,6 +1194,7 @@ export default function Admin() {
                                 {p.category}
                               </p>
                               <p className="font-display text-xl leading-snug text-cream">{p.name}</p>
+                              {p.tagline && <p className="mt-1 line-clamp-1 text-sm text-mute">{p.tagline}</p>}
                               <p className="mt-1 text-lg font-extrabold text-lime">
                                 ${p.price.toFixed(2)}
                               </p>
