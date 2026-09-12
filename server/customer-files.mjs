@@ -1,5 +1,5 @@
 /** Permanent paid-order artwork archive, intended for a dedicated LXC mount. */
-import { randomUUID } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs'
 import multer from 'multer'
 import path from 'node:path'
@@ -20,6 +20,7 @@ const RECYCLE_DIR = path.join(CUSTOMER_FILES_DIR, '.recycle-bin')
 mkdirSync(RECYCLE_DIR, { recursive: true })
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000
 const RECYCLE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+const DELETE_OVERRIDE_PIN = String(process.env.CUSTOMER_FILES_DELETE_PIN || '1231').trim()
 
 const MAX_MANAGER_FILE_BYTES = 25 * 1024 * 1024
 const managerUpload = multer({
@@ -172,7 +173,13 @@ function assertManualFile(relativePath) {
   return resolved
 }
 
-function assertCleanupAllowed(relativePath, unlockConfirmed) {
+function validDeleteOverridePin(value) {
+  const supplied = Buffer.from(String(value || '').trim())
+  const expected = Buffer.from(DELETE_OVERRIDE_PIN)
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected)
+}
+
+function assertCleanupAllowed(relativePath, unlockConfirmed, overridePin) {
   const resolved = resolveManagerFile(relativePath)
   if (!resolved) throw Object.assign(new Error('invalid_path'), { code: 'invalid_path' })
   if (!existsSync(resolved.absolute) || !statSync(resolved.absolute).isFile()) {
@@ -181,7 +188,12 @@ function assertCleanupAllowed(relativePath, unlockConfirmed) {
   const manual = resolved.normalized.split('/').some((part) => part.includes('_MANUAL-'))
   if (manual) return resolved
   const eligible = Date.now() >= statSync(resolved.absolute).mtimeMs + ONE_YEAR_MS
-  if (!eligible) throw Object.assign(new Error('order_file_locked'), { code: 'order_file_locked' })
+  if (!eligible) {
+    if (!validDeleteOverridePin(overridePin)) {
+      throw Object.assign(new Error('invalid_cleanup_pin'), { code: 'invalid_cleanup_pin' })
+    }
+    return resolved
+  }
   if (!unlockConfirmed) throw Object.assign(new Error('cleanup_unlock_required'), { code: 'cleanup_unlock_required' })
   return resolved
 }
@@ -404,7 +416,11 @@ export function mountCustomerFiles(app) {
 
   app.delete('/api/admin/customer-files/file', requireAdmin, (req, res) => {
     try {
-      const source = assertCleanupAllowed(req.query.path, String(req.query.unlock) === '1')
+      const source = assertCleanupAllowed(
+        req.query.path,
+        String(req.query.unlock) === '1',
+        req.body?.overridePin,
+      )
       const id = randomUUID()
       const recycleEntry = path.join(RECYCLE_DIR, id)
       mkdirSync(recycleEntry, { recursive: false, mode: 0o750 })
@@ -417,7 +433,7 @@ export function mountCustomerFiles(app) {
       return res.json({ ok: true, id })
     } catch (error) {
       const code = error?.code || 'recycle_failed'
-      return res.status(code === 'not_found' ? 404 : 400).json({ error: code })
+      return res.status(code === 'not_found' ? 404 : code === 'invalid_cleanup_pin' ? 403 : 400).json({ error: code })
     }
   })
 
