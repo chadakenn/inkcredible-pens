@@ -62,6 +62,7 @@ export default function FilesPanel() {
   const [confirmRecycle, setConfirmRecycle] = useState<string | null>(null)
   const [confirmPermanent, setConfirmPermanent] = useState<string | null>(null)
   const [cleanupUnlocked, setCleanupUnlocked] = useState<string | null>(null)
+  const [cleanupPin, setCleanupPin] = useState('')
 
   const refresh = () => {
     setBusy(true)
@@ -123,9 +124,29 @@ export default function FilesPanel() {
 
   const recycle = (file: CustomerFileRecord) => {
     setBusy(true)
-    void recycleCustomerFile(file.path, !file.manual)
-      .then(() => { setConfirmRecycle(null); setCleanupUnlocked(null); setMessage('File moved to the recycle bin.'); refresh() })
-      .catch((error) => { setMessage(error instanceof Error ? error.message : 'Could not recycle file.'); setBusy(false) })
+    void recycleCustomerFile(file.path, !file.manual && file.cleanupEligible, cleanupPin)
+      .then(() => { setConfirmRecycle(null); setCleanupUnlocked(null); setCleanupPin(''); setMessage('File moved to the recycle bin.'); refresh() })
+      .catch((error) => {
+        const incorrectPin = error instanceof Error && error.message === 'invalid_cleanup_pin'
+        const message = incorrectPin
+          ? 'Incorrect cleanup PIN. The paid-order file is still locked.'
+          : error instanceof Error ? error.message : 'Could not recycle file.'
+        if (incorrectPin) {
+          setCleanupUnlocked(null)
+          setConfirmRecycle(null)
+          setCleanupPin('')
+        }
+        setMessage(message)
+        setBusy(false)
+      })
+  }
+
+  const unlockEarlyWithPin = (file: CustomerFileRecord) => {
+    const pin = window.prompt('Enter the emergency cleanup PIN to recycle this locked paid-order file:')
+    if (pin === null) return
+    setCleanupPin(pin.trim())
+    setCleanupUnlocked(file.path)
+    setConfirmRecycle(file.path)
   }
 
   const restore = (id: string) => {
@@ -199,7 +220,8 @@ export default function FilesPanel() {
                 ? <><button type="button" onClick={() => recycle(file)} className="min-h-11 rounded-xl bg-pink px-3 font-bold text-white">Confirm recycle</button><button type="button" onClick={() => setConfirmRecycle(null)} className="min-h-11 rounded-xl border border-line px-3 text-cream">Cancel</button></>
                 : <button type="button" onClick={() => setConfirmRecycle(file.path)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-pink/50 px-3 font-bold text-pink"><Trash2 className="h-4 w-4" /> Recycle</button>)}
               {!file.manual && file.cleanupEligible && cleanupUnlocked !== file.path && <button type="button" onClick={() => setCleanupUnlocked(file.path)} className="min-h-11 rounded-xl border border-amber-300/50 px-3 font-bold text-amber-300">Unlock for cleanup</button>}
-              {!file.manual && cleanupUnlocked === file.path && <button type="button" onClick={() => { setCleanupUnlocked(null); setConfirmRecycle(null) }} className="min-h-11 rounded-xl border border-line px-3 text-cream">Keep locked</button>}
+              {!file.manual && !file.cleanupEligible && cleanupUnlocked !== file.path && <button type="button" onClick={() => unlockEarlyWithPin(file)} className="min-h-11 rounded-xl border border-pink/50 px-3 font-bold text-pink">Emergency delete</button>}
+              {!file.manual && cleanupUnlocked === file.path && <button type="button" onClick={() => { setCleanupUnlocked(null); setConfirmRecycle(null); setCleanupPin('') }} className="min-h-11 rounded-xl border border-line px-3 text-cream">Keep locked</button>}
             </div>
           </div>
           {editing?.path === file.path && <form onSubmit={saveEdit} className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
