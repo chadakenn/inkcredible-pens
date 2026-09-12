@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
 import { ArrowLeft, Mail, MessageSquare, Package, Palette } from 'lucide-react'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import FacebookIcon from '../components/FacebookIcon'
+import { GRAPHICS_FACEBOOK_URL, PENS_FACEBOOK_URL } from '../lib/socialLinks'
 
 const EMAIL = 'inkcredible.pens@gmail.com'
 
@@ -43,13 +45,33 @@ export default function Contact() {
         We read every note (usually with coffee and sarcasm).
       </p>
 
-      <a
-        href={`mailto:${EMAIL}?subject=${encodeURIComponent('Inkcredible Pens — hello')}`}
-        className="btn-primary mt-6 inline-flex min-h-11"
-      >
-        <Mail className="h-4 w-4" />
-        {EMAIL}
-      </a>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <a
+          href={`mailto:${EMAIL}?subject=${encodeURIComponent('Inkcredible Pens — hello')}`}
+          className="btn-primary inline-flex min-h-12 justify-center"
+        >
+          <Mail className="h-4 w-4" />
+          {EMAIL}
+        </a>
+        <a
+          href={PENS_FACEBOOK_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-cyan/50 bg-cyan/10 px-5 font-extrabold text-cyan transition hover:border-cyan hover:bg-cyan/15"
+        >
+          <FacebookIcon className="h-5 w-5" />
+          Message Inkcredible Pens on Facebook
+        </a>
+        <a
+          href={GRAPHICS_FACEBOOK_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-cyan/50 bg-cyan/10 px-5 font-extrabold text-cyan transition hover:border-cyan hover:bg-cyan/15"
+        >
+          <FacebookIcon className="h-5 w-5" />
+          Message Inkcredible Graphics on Facebook
+        </a>
+      </div>
 
       <div className="mt-10 rounded-3xl border border-line bg-ink-2 p-5 sm:p-6">
         <h2 className="font-display text-xl text-cream">What to include for customs</h2>

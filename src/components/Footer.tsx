@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom'
 import { Mail } from 'lucide-react'
 import LogoMark from './LogoMark'
 import GraphicsLogo from './GraphicsLogo'
+import FacebookIcon from './FacebookIcon'
+import { GRAPHICS_FACEBOOK_URL, PENS_FACEBOOK_URL } from '../lib/socialLinks'
 
 export default function Footer() {
   return (
@@ -54,6 +56,24 @@ export default function Footer() {
           >
             <Mail className="h-4 w-4 text-pink" />
             inkcredible.pens@gmail.com
+          </a>
+          <a
+            href={PENS_FACEBOOK_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-cyan/40 bg-cyan/10 px-4 py-2.5 font-extrabold text-cyan transition hover:border-cyan hover:bg-cyan/15"
+          >
+            <FacebookIcon className="h-5 w-5" />
+            Inkcredible Pens on Facebook
+          </a>
+          <a
+            href={GRAPHICS_FACEBOOK_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-cyan/40 bg-cyan/10 px-4 py-2.5 font-extrabold text-cyan transition hover:border-cyan hover:bg-cyan/15"
+          >
+            <FacebookIcon className="h-5 w-5" />
+            Inkcredible Graphics on Facebook
           </a>
           <p className="text-mute">Created with Humor. Backed by Heart. Fueled by Real Life.</p>
         </div>
