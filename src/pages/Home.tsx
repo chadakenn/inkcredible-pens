@@ -27,6 +27,8 @@ export default function Home() {
   const recentIds = useRecentlyViewed((s) => s.ids)
 
   const featured = useMemo(() => {
+    const managerPicks = products.filter((product) => product.featured && !product.hidden && product.inventoryQuantity !== 0)
+    if (managerPicks.length) return managerPicks.slice(0, 4)
     const picks = []
     for (const cat of FEATURED_ORDER) {
       const inCat = products.filter((p) => p.category === cat)

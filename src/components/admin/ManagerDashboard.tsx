@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, ClipboardList, Download, Droplets, FileText, FolderOpen, Package, PackageCheck, RefreshCw, Sparkles, Truck } from 'lucide-react'
+import { ArrowRight, ClipboardList, Download, Droplets, FileText, FolderOpen, Megaphone, Package, PackageCheck, RefreshCw, Save, Sparkles, Truck } from 'lucide-react'
 import { paidSalesSummary } from '../../lib/salesSummary'
 import { activeOrderCounts, currentEasternMonth, monthlySalesReport } from '../../lib/managerReports'
 import { ORDER_STATUS_LABEL, ordersNewestFirst, useOrders } from '../../store/orders'
+import { adminAuthHeaders } from '../../lib/adminAuth'
 
 const money = (value: number) => value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 
@@ -19,8 +20,19 @@ export default function ManagerDashboard({
   const hydrateFromApi = useOrders((state) => state.hydrateFromApi)
   const syncState = useOrders((state) => state.syncState)
   const [month, setMonth] = useState(() => currentEasternMonth())
+  const [announcement, setAnnouncement] = useState('Handmade to order')
+  const [announcementEnabled, setAnnouncementEnabled] = useState(true)
+  const [announcementState, setAnnouncementState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   useEffect(() => { void hydrateFromApi() }, [hydrateFromApi])
+  useEffect(() => { void fetch('/api/store-settings').then((response) => response.json()).then((data) => { setAnnouncement(data?.settings?.announcement?.message || 'Handmade to order'); setAnnouncementEnabled(data?.settings?.announcement?.enabled !== false) }).catch(() => undefined) }, [])
+
+  const saveAnnouncement = () => {
+    setAnnouncementState('saving')
+    void fetch('/api/admin/store-settings', { method: 'PATCH', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ announcement: { enabled: announcementEnabled, message: announcement } }) })
+      .then((response) => { if (!response.ok) throw new Error('save_failed'); setAnnouncementState('saved'); window.setTimeout(() => setAnnouncementState('idle'), 1800) })
+      .catch(() => setAnnouncementState('error'))
+  }
 
   const counts = useMemo(() => activeOrderCounts(orders), [orders])
   const lifetime = useMemo(() => paidSalesSummary(orders), [orders])
@@ -78,6 +90,12 @@ export default function ManagerDashboard({
 
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {quickLinks.map(({ label, detail, tab, icon: Icon, color }) => <button key={tab} type="button" onClick={() => onNavigate(tab)} className="group min-h-28 rounded-xl border border-line bg-ink-2 p-4 text-left transition hover:border-cyan/50 hover:bg-ink"><Icon className={`h-6 w-6 ${color}`} /><p className="mt-3 font-extrabold text-cream">{label}</p><p className="mt-1 text-xs text-mute">{detail}</p></button>)}
+    </section>
+
+    <section className="rounded-xl border border-line bg-ink-2 p-5 sm:p-6">
+      <div className="flex items-start gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-pink/10 text-pink"><Megaphone className="h-6 w-6" /></span><div><h3 className="font-display text-xl text-cream">Homepage announcement</h3><p className="text-sm text-mute">Change the message across the very top of the public shop.</p></div></div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto] lg:items-center"><input maxLength={120} value={announcement} onChange={(event) => { setAnnouncement(event.target.value); setAnnouncementState('idle') }} placeholder="Holiday cutoff, turnaround time, or current sale…" className="min-h-12 rounded-xl border border-line bg-ink px-4 text-cream outline-none focus:border-cyan" /><label className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-line bg-ink px-4 font-bold text-cream"><input type="checkbox" checked={announcementEnabled} onChange={(event) => setAnnouncementEnabled(event.target.checked)} className="h-5 w-5 accent-lime" /> Show on shop</label><button type="button" onClick={saveAnnouncement} disabled={announcementState === 'saving' || (announcementEnabled && announcement.trim().length < 2)} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-lime px-5 font-extrabold text-ink disabled:opacity-40"><Save className="h-4 w-4" />{announcementState === 'saving' ? 'Saving…' : 'Save message'}</button></div>
+      {announcementState === 'saved' && <p className="mt-2 text-sm font-bold text-lime">Homepage announcement updated.</p>}{announcementState === 'error' && <p className="mt-2 text-sm font-bold text-pink">Could not save the announcement.</p>}
     </section>
 
     <section className="rounded-xl border border-line bg-ink-2 p-5 sm:p-6">

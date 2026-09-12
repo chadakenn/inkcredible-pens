@@ -24,6 +24,7 @@ import {
   UserPlus,
   Users,
   Activity,
+  Star,
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
@@ -738,7 +739,7 @@ export default function Admin() {
 
           <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-line bg-ink-2 p-4"><Package className="h-5 w-5 text-cyan" /><p className="mt-2 text-xs font-bold uppercase text-mute">Shop products</p><p className="font-display text-2xl text-cream">{products.length}</p></div>
-            <div className="rounded-xl border border-line bg-ink-2 p-4"><Store className="h-5 w-5 text-lime" /><p className="mt-2 text-xs font-bold uppercase text-mute">Categories</p><p className="font-display text-2xl text-cream">{CATEGORIES.filter((category) => products.some((product) => product.category === category)).length}</p></div>
+            <div className="rounded-xl border border-line bg-ink-2 p-4"><Star className="h-5 w-5 text-lime" /><p className="mt-2 text-xs font-bold uppercase text-mute">Homepage featured</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.featured).length}</p><p className="text-xs text-mute">First four appear</p></div>
             <div className="rounded-xl border border-line bg-ink-2 p-4"><RotateCcw className="h-5 w-5 text-amber-300" /><p className="mt-2 text-xs font-bold uppercase text-mute">Made to order</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.inventoryQuantity == null).length}</p></div>
             <div className="rounded-xl border border-line bg-ink-2 p-4"><Lock className="h-5 w-5 text-pink" /><p className="mt-2 text-xs font-bold uppercase text-mute">Hidden from shop</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.hidden).length}</p></div>
           </div>
@@ -1277,6 +1278,14 @@ export default function Admin() {
                             </div>
                           ) : (
                             <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void updateProduct(p.id, { featured: !p.featured }).then(() => showToast(p.featured ? 'Removed from homepage' : 'Added to homepage')).catch((error) => setEditSaveError(error instanceof Error ? error.message : 'Could not change featured status.'))}
+                                className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 text-base font-extrabold transition active:scale-[0.98] ${p.featured ? 'border-lime/50 bg-lime/10 text-lime' : 'border-line text-mute'}`}
+                              >
+                                <Star className="h-4 w-4" fill={p.featured ? 'currentColor' : 'none'} />
+                                {p.featured ? 'Featured' : 'Feature'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => void updateProduct(p.id, { hidden: !p.hidden }).then(() => showToast(p.hidden ? 'Product is visible again' : 'Product hidden from shop')).catch((error) => setEditSaveError(error instanceof Error ? error.message : 'Could not change visibility.'))}

@@ -18,6 +18,7 @@ function describe(method, url, body = {}) {
   if (clean === '/api/admin/users') return ['account.created', body.displayName || body.username || 'Manager account']
   if (clean === '/api/admin/change-password') return ['account.password_changed', 'Own password']
   if (clean === '/api/admin/reset-password') return ['account.password_reset', body.userId || 'Manager account']
+  if (clean === '/api/admin/store-settings') return ['store.announcement_updated', body.announcement?.message || 'Homepage announcement']
   if (clean.startsWith('/api/catalog/products')) return [`product.${method === 'POST' ? 'created' : method === 'PATCH' ? 'updated' : 'deleted'}`, body.name || decodeURIComponent(clean.split('/').at(-1) || 'Product')]
   if (clean === '/api/catalog/reset') return ['product.catalog_restored', 'Product catalog']
   if (clean.startsWith('/api/scents')) return [`scent.${method === 'POST' ? 'changed' : method === 'PATCH' ? 'renamed' : 'deleted'}`, body.name || body.oldName || decodeURIComponent(clean.split('/').at(-1) || 'Scent list')]

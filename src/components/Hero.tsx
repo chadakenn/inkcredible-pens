@@ -151,9 +151,7 @@ export default function Hero() {
                   >
                     <Icon className="h-4 w-4" strokeWidth={2.5} />
                   </span>
-                  <span className="rounded-full border border-line bg-ink px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-mute">
-                    {count > 0 ? `${count} items` : 'Shop'}
-                  </span>
+                  <span className="rounded-full border border-line bg-ink px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-mute">{count > 0 ? 'Shop' : 'Coming soon'}</span>
                 </div>
                 <h2 className="mt-3 font-display text-xl text-cream transition group-hover:text-lime group-active:text-lime">
                   {c.title}

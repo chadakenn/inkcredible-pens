@@ -5,14 +5,17 @@ const STORAGE_KEY = 'inkcredible-announce-dismissed'
 
 export default function AnnouncementBar() {
   const [visible, setVisible] = useState(false)
+  const [message, setMessage] = useState('Handmade to order')
 
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem(STORAGE_KEY) === '1') return
-    } catch {
-      /* ignore */
-    }
-    setVisible(true)
+    let active = true
+    void fetch('/api/store-settings').then((response) => response.json()).then((data) => {
+      if (!active || data?.settings?.announcement?.enabled === false) return
+      setMessage(String(data?.settings?.announcement?.message || 'Handmade to order'))
+      try { if (sessionStorage.getItem(STORAGE_KEY) === '1') return } catch { /* ignore */ }
+      setVisible(true)
+    }).catch(() => setVisible(true))
+    return () => { active = false }
   }, [])
 
   if (!visible) return null
@@ -30,7 +33,7 @@ export default function AnnouncementBar() {
     <div className="relative z-50 border-b border-line/60 bg-ink-2/95 text-center text-[11px] font-bold leading-snug text-cream sm:text-xs">
       <div className="mx-auto flex max-w-6xl items-center justify-center gap-2 px-10 py-2 sm:px-12">
         <p className="min-w-0">
-          <span className="text-lime">Handmade to order</span>
+          <span className="text-lime">{message}</span>
           <span className="mx-1.5 text-mute">·</span>
           Questions?{' '}
           <a

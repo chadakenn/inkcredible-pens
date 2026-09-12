@@ -84,6 +84,8 @@ export interface Product {
   optionGroups?: ProductOptionGroup[]
   /** Hidden products remain saved but do not appear in the storefront. */
   hidden?: boolean
+  /** Manager-selected homepage feature. */
+  featured?: boolean
   /** Present on synthetic custom logo sticker cart lines */
   custom?: CustomLogoMeta
 }

@@ -10,6 +10,7 @@ const labels: Record<string, string> = {
   'quote.payment_sent': 'Sent quote payment link', 'quote.updated': 'Updated quote', 'order.updated': 'Updated order', 'order.deleted': 'Deleted order',
   'file.uploaded_or_restored': 'Uploaded or restored file', 'file.renamed_or_moved': 'Renamed or moved file', 'file.recycled_or_deleted': 'Recycled or deleted file',
   'scent.changed': 'Changed scent list', 'scent.renamed': 'Renamed scent', 'scent.deleted': 'Deleted scent', 'order.proof_changed': 'Changed order proof',
+  'store.announcement_updated': 'Updated homepage announcement',
 }
 
 export default function ActivityPanel() {

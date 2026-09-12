@@ -20,6 +20,7 @@ import { mountListingsMcp } from './listings-mcp.mjs'
 import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
 import { activityMiddleware, mountActivity } from './activity.mjs'
+import { mountStoreSettings } from './store-settings.mjs'
 import { priceCart } from './pricing.mjs'
 import {
   attachStripeSession,
@@ -172,6 +173,7 @@ app.use(activityMiddleware)
 
 mountAdminAuth(app)
 mountActivity(app)
+mountStoreSettings(app)
 mountUploads(app)
 mountCustomerFiles(app)
 mountOrders(app)

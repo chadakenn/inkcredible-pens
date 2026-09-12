@@ -249,6 +249,10 @@ export function validateProductShape(body, { partial = false } = {}) {
     if (typeof body.hidden !== "boolean") errors.push("invalid_hidden")
     else out.hidden = body.hidden
   }
+  if (Object.prototype.hasOwnProperty.call(body, "featured")) {
+    if (typeof body.featured !== "boolean") errors.push("invalid_featured")
+    else out.featured = body.featured
+  }
 
   return { errors, out }
 }

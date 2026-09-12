@@ -1,27 +1,28 @@
-import { Heart, Package, Sparkles } from 'lucide-react'
+import { MapPin, Palette, ShieldCheck, Truck } from 'lucide-react'
 
 const values = [
   {
-    Icon: Heart,
-    title: 'Shop small',
-    blurb: 'Real humans. Real hustle. Not a megastore with a vibe filter.',
+    Icon: MapPin,
+    title: 'Made in Ohio',
+    blurb: 'Made to order and packed by a real small business.',
     accent: 'text-pink',
     ring: 'border-pink/30 bg-pink/10',
   },
   {
-    Icon: Sparkles,
-    title: 'Made with sarcasm',
-    blurb: 'Humor. Hustle. Heart. If it isn’t a little spicy, we don’t ship it.',
+    Icon: ShieldCheck,
+    title: 'Secure checkout',
+    blurb: 'Payments are handled securely through Stripe.',
     accent: 'text-lime',
     ring: 'border-lime/30 bg-lime/10',
   },
   {
-    Icon: Package,
-    title: 'Ships from us',
-    blurb: 'Packed here, not from a mystery warehouse halfway across the planet.',
+    Icon: Truck,
+    title: 'Free over $60',
+    blurb: 'Standard shipping is free when your order tops $60.',
     accent: 'text-cyan',
     ring: 'border-cyan/30 bg-cyan/10',
   },
+  { Icon: Palette, title: 'Artwork approval', blurb: 'Custom artwork is confirmed before production starts.', accent: 'text-lavender', ring: 'border-lavender/30 bg-lavender/10' },
 ] as const
 
 export default function TrustStrip() {
@@ -67,7 +68,7 @@ export default function TrustStrip() {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-6xl gap-3 px-4 py-8 sm:grid-cols-3 sm:gap-4 sm:px-6 sm:py-9">
+      <div className="mx-auto grid max-w-6xl gap-3 px-4 py-8 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4 sm:px-6 sm:py-9">
         {values.map(({ Icon, title, blurb, accent, ring }) => (
           <div
             key={title}

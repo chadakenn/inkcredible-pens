@@ -21,13 +21,13 @@ export default function BrandQuotes() {
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-wider text-lavender">
-            From the brand
+            Our personality
           </p>
           <h2 id="quotes-heading" className="font-display text-3xl sm:text-4xl">
-            Happy customers start here
+            Why Inkcredible?
           </h2>
           <p className="mt-1 max-w-lg text-sm text-mute">
-            Studio vibes — not invented five-star names. Got a real take? We want it.
+            Handmade products with personality, packed by real people who care.
           </p>
         </div>
         <a
