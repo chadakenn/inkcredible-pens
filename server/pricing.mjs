@@ -374,6 +374,9 @@ export function priceCartLine(raw) {
 
   const catalogId = String(config?.catalogId || baseCatalogId(productId))
   const product = catalogProductById(catalogId)
+  if (product?.hidden) {
+    throw Object.assign(new Error(`unknown_product:${catalogId}`), { code: 'unknown_product', productId: catalogId })
+  }
   if (!product) {
     throw Object.assign(new Error(`unknown_product:${catalogId}`), {
       code: 'unknown_product',

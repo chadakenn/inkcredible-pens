@@ -23,11 +23,13 @@ import {
   ShieldCheck,
   UserPlus,
   Users,
+  Activity,
 } from 'lucide-react'
 import type { Category, ProductOptionGroup } from '../data/products'
 import {
   addAdminUser,
   changeAdminPassword,
+  resetAdminPassword,
   fetchAdminSession,
   fetchAdminSetupStatus,
   fetchAdminUsers,
@@ -49,6 +51,7 @@ import OrdersPanel from '../components/admin/OrdersPanel'
 import ManagerDashboard from '../components/admin/ManagerDashboard'
 import QuotesPanel from '../components/admin/QuotesPanel'
 import FilesPanel from '../components/admin/FilesPanel'
+import ActivityPanel from '../components/admin/ActivityPanel'
 import ProductPhotoField from '../components/admin/ProductPhotoField'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -159,7 +162,7 @@ function CanvasPriceEditor({
   )
 }
 
-type AdminTab = 'dashboard' | 'products' | 'scents' | 'orders' | 'quotes' | 'files'
+type AdminTab = 'dashboard' | 'products' | 'scents' | 'orders' | 'quotes' | 'files' | 'activity'
 
 interface ProductEditForm {
   id: string
@@ -188,10 +191,11 @@ const TABS: { id: AdminTab; label: string; icon: typeof Package }[] = [
   { id: 'products', label: 'Products', icon: Package },
   { id: 'scents', label: 'Scents', icon: Droplets },
   { id: 'orders', label: 'Orders', icon: ClipboardList },
+  { id: 'activity', label: 'Activity', icon: Activity },
 ]
 
 function parseTab(raw: string | null): AdminTab {
-  if (raw === 'dashboard' || raw === 'quotes' || raw === 'files' || raw === 'scents' || raw === 'orders' || raw === 'products') return raw
+  if (raw === 'dashboard' || raw === 'quotes' || raw === 'files' || raw === 'scents' || raw === 'orders' || raw === 'products' || raw === 'activity') return raw
   return 'dashboard'
 }
 
@@ -223,6 +227,7 @@ export default function Admin() {
   const updateProduct = useCatalog((s) => s.updateProduct)
   const removeProduct = useCatalog((s) => s.removeProduct)
   const resetToDefaults = useCatalog((s) => s.resetToDefaults)
+  const hydrateCatalog = useCatalog((s) => s.hydrateFromApi)
 
   const scents = useScents((s) => s.scents)
   const scentsSyncState = useScents((s) => s.syncState)
@@ -270,6 +275,9 @@ export default function Admin() {
   const [nextPassword, setNextPassword] = useState('')
   const [nextPasswordConfirm, setNextPasswordConfirm] = useState('')
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [resetUserId, setResetUserId] = useState('')
+  const [resetCurrentPassword, setResetCurrentPassword] = useState('')
+  const [resetNewPassword, setResetNewPassword] = useState('')
   const showToast = useCart((s) => s.showToast)
 
   const searchMatchedProducts = useMemo(() => {
@@ -337,6 +345,10 @@ export default function Admin() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (unlocked) void hydrateCatalog(true)
+  }, [hydrateCatalog, unlocked])
 
   const setTab = (next: AdminTab) => {
     setShowAccounts(false)
@@ -432,6 +444,17 @@ export default function Admin() {
         showToast('Password changed')
       })
       .catch(() => setAccountError('Could not change password. Check the current password and use at least 10 characters.'))
+  }
+
+  const resetManagerPassword = (e: FormEvent) => {
+    e.preventDefault()
+    setAccountError(null)
+    void resetAdminPassword(resetUserId, resetCurrentPassword, resetNewPassword)
+      .then((user) => {
+        setResetUserId(''); setResetCurrentPassword(''); setResetNewPassword('')
+        showToast(`${user.displayName}'s password was reset`)
+      })
+      .catch(() => setAccountError('Password reset failed. Check your own password and use at least 10 characters for the new one.'))
   }
 
   const lock = () => {
@@ -686,6 +709,15 @@ export default function Admin() {
               <button type="submit" className="min-h-12 w-full rounded-xl bg-lime px-4 text-base font-extrabold text-ink">Change password</button>
             </form>
             </div>
+            <form onSubmit={resetManagerPassword} className="rounded-xl border border-amber-300/30 bg-ink-2 p-5">
+              <div className="flex items-center gap-3"><ShieldCheck className="h-6 w-6 text-amber-300" /><div><h3 className="font-display text-xl text-cream">Recover a manager account</h3><p className="text-sm text-mute">Reset a forgotten password. Your own password is required to approve it, and the manager will be signed out everywhere.</p></div></div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                <select required value={resetUserId} onChange={(event) => setResetUserId(event.target.value)} className="min-h-12 rounded-xl border border-line bg-ink px-3 text-cream outline-none focus:border-cyan"><option value="">Choose manager…</option>{adminUsers.filter((user) => user.id !== adminUser?.id).map((user) => <option key={user.id} value={user.id}>{user.displayName} (@{user.username})</option>)}</select>
+                <input required type="password" autoComplete="current-password" value={resetCurrentPassword} onChange={(event) => setResetCurrentPassword(event.target.value)} placeholder="Your current password" className="min-h-12 rounded-xl border border-line bg-ink px-3 text-cream outline-none placeholder:text-mute focus:border-cyan" />
+                <input required type="password" minLength={10} autoComplete="new-password" value={resetNewPassword} onChange={(event) => setResetNewPassword(event.target.value)} placeholder="Their new password (10+)" className="min-h-12 rounded-xl border border-line bg-ink px-3 text-cream outline-none placeholder:text-mute focus:border-cyan" />
+              </div>
+              <button disabled={!resetUserId} className="mt-3 min-h-12 rounded-xl bg-amber-300 px-5 font-extrabold text-ink disabled:opacity-40">Reset selected password</button>
+            </form>
             {accountError && <p role="alert" className="rounded-xl border border-pink/40 bg-pink/10 px-4 py-3 text-sm font-bold text-pink">{accountError}</p>}
           </div>
         )}
@@ -694,6 +726,7 @@ export default function Admin() {
       {!showAccounts && tab === 'dashboard' && <ManagerDashboard onOpenOrders={() => setTab('orders')} onOpenOrder={openOrder} onNavigate={setTab} />}
       {!showAccounts && tab === 'quotes' && <QuotesPanel />}
       {!showAccounts && tab === 'files' && <FilesPanel />}
+      {!showAccounts && tab === 'activity' && <ActivityPanel />}
 
       {!showAccounts && tab === 'products' && (
         <div>
@@ -707,7 +740,7 @@ export default function Admin() {
             <div className="rounded-xl border border-line bg-ink-2 p-4"><Package className="h-5 w-5 text-cyan" /><p className="mt-2 text-xs font-bold uppercase text-mute">Shop products</p><p className="font-display text-2xl text-cream">{products.length}</p></div>
             <div className="rounded-xl border border-line bg-ink-2 p-4"><Store className="h-5 w-5 text-lime" /><p className="mt-2 text-xs font-bold uppercase text-mute">Categories</p><p className="font-display text-2xl text-cream">{CATEGORIES.filter((category) => products.some((product) => product.category === category)).length}</p></div>
             <div className="rounded-xl border border-line bg-ink-2 p-4"><RotateCcw className="h-5 w-5 text-amber-300" /><p className="mt-2 text-xs font-bold uppercase text-mute">Made to order</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.inventoryQuantity == null).length}</p></div>
-            <div className="rounded-xl border border-line bg-ink-2 p-4"><Trash2 className="h-5 w-5 text-pink" /><p className="mt-2 text-xs font-bold uppercase text-mute">Sold out</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.inventoryQuantity === 0).length}</p></div>
+            <div className="rounded-xl border border-line bg-ink-2 p-4"><Lock className="h-5 w-5 text-pink" /><p className="mt-2 text-xs font-bold uppercase text-mute">Hidden from shop</p><p className="font-display text-2xl text-cream">{products.filter((product) => product.hidden).length}</p></div>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -1202,6 +1235,7 @@ export default function Admin() {
                               <p className={`mt-1 text-xs font-extrabold ${p.inventoryQuantity === 0 ? 'text-pink' : 'text-cyan'}`}>
                                 {p.inventoryQuantity == null ? 'Made to order' : p.inventoryQuantity === 0 ? 'Sold out' : `${p.inventoryQuantity} available`}
                               </p>
+                              <p className={`mt-1 text-xs font-extrabold ${p.hidden ? 'text-pink' : 'text-lime'}`}>{p.hidden ? 'Hidden from store' : 'Visible in store'}</p>
                             </div>
                           </div>
                           {confirmDeleteId === p.id ? (
@@ -1243,6 +1277,14 @@ export default function Admin() {
                             </div>
                           ) : (
                             <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void updateProduct(p.id, { hidden: !p.hidden }).then(() => showToast(p.hidden ? 'Product is visible again' : 'Product hidden from shop')).catch((error) => setEditSaveError(error instanceof Error ? error.message : 'Could not change visibility.'))}
+                                className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-4 text-base font-extrabold transition active:scale-[0.98] ${p.hidden ? 'border-lime/50 text-lime' : 'border-amber-300/50 text-amber-300'}`}
+                              >
+                                {p.hidden ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                                {p.hidden ? 'Show' : 'Hide'}
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {

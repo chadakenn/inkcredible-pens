@@ -115,3 +115,10 @@ export async function changeAdminPassword(currentPassword: string, newPassword: 
   })
   return saveSession(data)
 }
+
+export async function resetAdminPassword(userId: string, currentPassword: string, newPassword: string): Promise<AdminUser> {
+  const data = await jsonRequest<{ user: AdminUser }>('/api/admin/reset-password', {
+    method: 'POST', headers: adminAuthHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ userId, currentPassword, newPassword }),
+  })
+  return data.user
+}

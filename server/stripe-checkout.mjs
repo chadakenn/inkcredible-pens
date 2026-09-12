@@ -19,6 +19,7 @@ import { mountProofs } from './proofs.mjs'
 import { mountListingsMcp } from './listings-mcp.mjs'
 import { markQuotePaid, mountQuotes, quoteShippingCents } from './quotes.mjs'
 import { assertAdminPinSafeToBoot, mountAdminAuth } from './adminAuth.mjs'
+import { activityMiddleware, mountActivity } from './activity.mjs'
 import { priceCart } from './pricing.mjs'
 import {
   attachStripeSession,
@@ -167,8 +168,10 @@ app.post(
 )
 
 app.use(express.json({ limit: '2mb' }))
+app.use(activityMiddleware)
 
 mountAdminAuth(app)
+mountActivity(app)
 mountUploads(app)
 mountCustomerFiles(app)
 mountOrders(app)

@@ -32,7 +32,7 @@ interface CatalogState {
   products: Product[]
   syncState: CatalogSyncState
   syncError: string | null
-  hydrateFromApi: () => Promise<void>
+  hydrateFromApi: (includeHidden?: boolean) => Promise<void>
   addProduct: (input: NewProductInput) => Promise<Product>
   removeProduct: (id: string) => Promise<void>
   updateProduct: (id: string, patch: import('../lib/catalogApi').PatchProductBody) => Promise<void>
@@ -73,10 +73,10 @@ export const useCatalog = create<CatalogState>()(
       syncState: 'idle',
       syncError: null,
 
-      hydrateFromApi: async () => {
+      hydrateFromApi: async (includeHidden = false) => {
         set({ syncState: 'loading', syncError: null })
         try {
-          const remote = await fetchCatalog()
+          const remote = await fetchCatalog(includeHidden)
           set({
             products: remote,
             syncState: 'synced',

@@ -32,8 +32,8 @@ async function parseJson(res: Response): Promise<unknown> {
   }
 }
 
-export async function fetchCatalog(): Promise<Product[]> {
-  const res = await fetch('/api/catalog')
+export async function fetchCatalog(includeHidden = false): Promise<Product[]> {
+  const res = await fetch(includeHidden ? '/api/catalog?includeHidden=1' : '/api/catalog')
   const data = (await parseJson(res)) as {
     products?: Product[]
     error?: string

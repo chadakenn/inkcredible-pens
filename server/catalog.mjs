@@ -245,6 +245,10 @@ export function validateProductShape(body, { partial = false } = {}) {
   if (Object.prototype.hasOwnProperty.call(body, "optionGroups")) {
     out.optionGroups = normalizeOptionGroups(body.optionGroups, errors)
   }
+  if (Object.prototype.hasOwnProperty.call(body, "hidden")) {
+    if (typeof body.hidden !== "boolean") errors.push("invalid_hidden")
+    else out.hidden = body.hidden
+  }
 
   return { errors, out }
 }
@@ -258,7 +262,7 @@ export function mountCatalog(app) {
   app.get("/api/catalog", (_req, res) => {
     try {
       const products = readProducts()
-      return res.json({ products })
+      return res.json({ products: _req.query.includeHidden === "1" ? products : products.filter((product) => !product.hidden) })
     } catch (err) {
       return handleCorrupt(res, err)
     }
@@ -270,7 +274,7 @@ export function mountCatalog(app) {
     try {
       const products = readProducts()
       const product = products.find((p) => p.id === id)
-      if (!product) return res.status(404).json({ error: "not_found" })
+      if (!product || product.hidden) return res.status(404).json({ error: "not_found" })
       return res.json({ product })
     } catch (err) {
       return handleCorrupt(res, err)
@@ -283,7 +287,7 @@ export function mountCatalog(app) {
     try {
       const products = readProducts()
       const product = products.find((p) => p.id === id)
-      if (!product) return res.status(404).json({ error: "not_found" })
+      if (!product || product.hidden) return res.status(404).json({ error: "not_found" })
       return res.json({
         id: product.id,
         price: product.price,

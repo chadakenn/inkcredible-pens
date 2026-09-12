@@ -200,4 +200,19 @@ export function mountAdminAuth(app) {
     writeUsers(users)
     return res.json({ ok: true, ...authResponse(users[index]) })
   })
+
+  app.post('/api/admin/reset-password', requireAdmin, accountLimiter, (req, res) => {
+    const users = readUsers()
+    const actor = users.find((user) => user.id === req.admin.sub)
+    if (!passwordMatches(actor, req.body?.currentPassword)) return res.status(401).json({ error: 'invalid_password' })
+    const index = users.findIndex((user) => user.id === String(req.body?.userId || ''))
+    if (index < 0) return res.status(404).json({ error: 'user_not_found' })
+    const nextPassword = String(req.body?.newPassword || '')
+    try { validateAccount(users[index].username, users[index].displayName, nextPassword) }
+    catch (error) { return accountError(res, error) }
+    const salt = randomBytes(16).toString('hex')
+    users[index] = { ...users[index], passwordSalt: salt, passwordHash: scryptSync(nextPassword, salt, 64).toString('hex'), sessionVersion: (users[index].sessionVersion || 1) + 1, updatedAt: new Date().toISOString() }
+    writeUsers(users)
+    return res.json({ ok: true, user: publicUser(users[index]) })
+  })
 }

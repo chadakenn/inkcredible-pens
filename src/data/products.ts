@@ -82,6 +82,8 @@ export interface Product {
   /** Missing means made to order; zero means sold out. */
   inventoryQuantity?: number
   optionGroups?: ProductOptionGroup[]
+  /** Hidden products remain saved but do not appear in the storefront. */
+  hidden?: boolean
   /** Present on synthetic custom logo sticker cart lines */
   custom?: CustomLogoMeta
 }
