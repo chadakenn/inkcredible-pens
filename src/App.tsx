@@ -7,6 +7,7 @@ import Toast from './components/Toast'
 import ScrollToTop from './components/ScrollToTop'
 import NavProgress from './components/NavProgress'
 import AnnouncementBar from './components/AnnouncementBar'
+import AnalyticsTracker from './components/AnalyticsTracker'
 import Home from './pages/Home'
 import { useCatalog } from './store/catalog'
 import { useScents } from './store/scents'
@@ -56,6 +57,7 @@ export default function App() {
 
   return (
     <div className="noise-bg min-h-dvh flex flex-col">
+      <AnalyticsTracker />
       <NavProgress />
       <AnnouncementBar />
       <Header />
