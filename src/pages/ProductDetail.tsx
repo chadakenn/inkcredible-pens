@@ -1,3 +1,4 @@
+import { groupScents } from '../data/scentCategories'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, Link2, Minus, Plus, Share2, ZoomIn } from 'lucide-react'
@@ -282,8 +283,10 @@ export default function ProductDetail() {
                   No scents available right now. Check back soon.
                 </p>
               ) : (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {scents.map((s) => {
+                <div className="mt-4 space-y-5">
+                  {groupScents(scents).map(([category, names]) => <div key={category}>
+                    <h3 className="mb-2 text-sm font-extrabold uppercase tracking-wide text-cyan">{category}</h3>
+                    <div className="flex flex-wrap gap-2">{names.map((s) => {
                     const on = scent === s
                     return (
                       <button
@@ -302,7 +305,7 @@ export default function ProductDetail() {
                         {s}
                       </button>
                     )
-                  })}
+                  })}</div></div>)}
                 </div>
               )}
               {scentNudge && !scent && (

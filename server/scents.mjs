@@ -22,6 +22,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const SCENTS_DIR = path.resolve(__dirname, '../data/catalog')
 export const SCENTS_FILE = path.join(SCENTS_DIR, 'scents.json')
 export const SCENTS_SEED_FILE = path.join(__dirname, 'scents-seed.json')
+const MENU_FILE = path.join(__dirname, 'scents-menu.json')
+const MENU_MIGRATION_FILE = path.join(SCENTS_DIR, '.categorized-menu-v1')
 
 mkdirSync(SCENTS_DIR, { recursive: true })
 
@@ -64,6 +66,15 @@ function ensureScentsFile() {
 
 function readScents() {
   ensureScentsFile()
+  // Add the pictured menu once to an existing live list; later removals stay removed.
+  if (!existsSync(MENU_MIGRATION_FILE)) {
+    const current = readJsonFile(SCENTS_FILE)
+    const existing = Array.isArray(current) ? current : current?.scents
+    if (!Array.isArray(existing)) throw new CorruptJsonError(SCENTS_FILE, new Error('unexpected_shape'))
+    const added = JSON.parse(readFileSync(MENU_FILE, 'utf8')).filter((name) => !existing.some((s) => normalize(s).toLowerCase() === name.toLowerCase()))
+    if (added.length) writeAtomic([...existing, ...added])
+    writeJsonAtomic(MENU_MIGRATION_FILE, { applied: true }, { keepBackups: 0 })
+  }
   const data = readJsonFile(SCENTS_FILE)
   if (data == null) return []
   if (Array.isArray(data)) {
