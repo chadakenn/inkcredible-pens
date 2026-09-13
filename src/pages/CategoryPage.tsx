@@ -13,6 +13,7 @@ import {
   Camera,
 } from 'lucide-react'
 import type { Category, Product } from '../data/products'
+import { STICKER_CATEGORIES, stickerCategories, stickerHasNoCussWords, type StickerCategory } from '../data/stickerCategories'
 import { useCatalog } from '../store/catalog'
 import ProductCard from '../components/ProductCard'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
@@ -156,6 +157,8 @@ export default function CategoryPage({ category }: { category: Category }) {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('featured')
   const [letter, setLetter] = useState<string | null>(null)
+  const [stickerFilter, setStickerFilter] = useState<StickerCategory | null>(null)
+  const [cleanOnly, setCleanOnly] = useState(false)
   const [visible, setVisible] = useState(PAGE_SIZE)
   const showLetterFilter = category === 'Stickers'
 
@@ -189,21 +192,25 @@ export default function CategoryPage({ category }: { category: Category }) {
             p.name.toLowerCase().includes(q) ||
             p.tagline.toLowerCase().includes(q),
         )
+    if (category === 'Stickers' && stickerFilter) matched = matched.filter(p => stickerCategories(p).includes(stickerFilter))
+    if (category === 'Stickers' && cleanOnly) matched = matched.filter(stickerHasNoCussWords)
     if (showLetterFilter && letter) {
       matched = matched.filter((p) => nameStartsWithLetter(p.name, letter))
     }
     return sortProducts(matched, sort)
-  }, [products, category, debouncedQuery, sort, letter, showLetterFilter])
+  }, [products, category, debouncedQuery, sort, letter, showLetterFilter, stickerFilter, cleanOnly])
 
   useEffect(() => {
     setVisible(PAGE_SIZE)
-  }, [category, debouncedQuery, sort, letter])
+  }, [category, debouncedQuery, sort, letter, stickerFilter, cleanOnly])
 
   useEffect(() => {
     setQuery('')
     setDebouncedQuery('')
     setSort('featured')
     setLetter(null)
+    setStickerFilter(null)
+    setCleanOnly(false)
   }, [category])
 
   const shown = filtered.slice(0, visible)
@@ -343,6 +350,15 @@ export default function CategoryPage({ category }: { category: Category }) {
             )}
           </p>
         </div>
+
+        {category === 'Stickers' && <section className="mb-6 rounded-2xl border border-line bg-ink-2 p-4" aria-label="Sticker themes">
+          <p className="mb-3 text-xs font-extrabold uppercase tracking-wider text-pink">Browse sticker themes</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setStickerFilter(null)} aria-pressed={!stickerFilter} className={`min-h-11 rounded-full px-4 text-sm font-bold ${!stickerFilter ? 'bg-pink text-white' : 'border border-line bg-ink text-cream'}`}>All stickers</button>
+            {STICKER_CATEGORIES.map(theme => <button key={theme} type="button" onClick={() => setStickerFilter(stickerFilter === theme ? null : theme)} aria-pressed={stickerFilter === theme} className={`min-h-11 rounded-full px-4 text-sm font-bold ${stickerFilter === theme ? 'bg-pink text-white' : 'border border-line bg-ink text-cream hover:border-pink/60'}`}>{theme}</button>)}
+          </div>
+          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm font-bold text-cream"><input type="checkbox" checked={cleanOnly} onChange={e => setCleanOnly(e.target.checked)} className="h-5 w-5 accent-pink" />No cuss words <span className="font-normal text-mute">(manager-verified designs)</span></label>
+        </section>}
 
         {showLetterFilter && (
           <div className="mb-6">

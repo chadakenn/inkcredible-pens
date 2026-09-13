@@ -20,6 +20,8 @@ export interface NewProductInput {
   name: string
   price: number
   category: Category
+  stickerCategories?: Product['stickerCategories']
+  stickerClean?: boolean
   tagline?: string
   description?: string
   imageUrl?: string
@@ -94,6 +96,8 @@ export const useCatalog = create<CatalogState>()(
           name: input.name.trim(),
           price: input.price,
           category: input.category,
+          stickerCategories: input.category === 'Stickers' ? input.stickerCategories : undefined,
+          stickerClean: input.category === 'Stickers' ? input.stickerClean : undefined,
           tagline: (input.tagline ?? '').trim() || 'Handmade Inkcredible goodies.',
           description:
             (input.description ?? '').trim() ||

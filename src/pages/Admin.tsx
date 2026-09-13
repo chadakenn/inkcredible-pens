@@ -47,6 +47,8 @@ import {
   type NewProductInput,
 } from '../store/catalog'
 import { useScents } from '../store/scents'
+import { STICKER_CATEGORIES, stickerCategories, stickerHasNoCussWords, type StickerCategory } from '../data/stickerCategories'
+import StickerCategoryEditor from '../components/admin/StickerCategoryEditor'
 import { groupScents } from '../data/scentCategories'
 import LogoMark from '../components/LogoMark'
 import OrdersPanel from '../components/admin/OrdersPanel'
@@ -171,6 +173,8 @@ interface ProductEditForm {
   name: string
   price: number
   category: Category
+  stickerCategories?: import('../data/stickerCategories').StickerCategory[]
+  stickerClean?: boolean
   imageUrl: string
   inventoryQuantity: number | null
   optionGroups?: ProductOptionGroup[]
@@ -278,6 +282,7 @@ export default function Admin() {
   const [nextPasswordConfirm, setNextPasswordConfirm] = useState('')
   const [accountError, setAccountError] = useState<string | null>(null)
   const [resetUserId, setResetUserId] = useState('')
+  const [stickerTheme, setStickerTheme] = useState<StickerCategory | null>(null)
   const [resetCurrentPassword, setResetCurrentPassword] = useState('')
   const [resetNewPassword, setResetNewPassword] = useState('')
   const showToast = useCart((s) => s.showToast)
@@ -311,8 +316,9 @@ export default function Admin() {
       productType === 'All'
         ? searchMatchedProducts
         : searchMatchedProducts.filter((p) => p.category === productType)
-    return [...list].sort((a, b) => a.name.localeCompare(b.name))
-  }, [searchMatchedProducts, productType])
+    const themed = productType === 'Stickers' && stickerTheme ? list.filter(p => stickerCategories(p).includes(stickerTheme)) : list
+    return [...themed].sort((a, b) => a.name.localeCompare(b.name))
+  }, [searchMatchedProducts, productType, stickerTheme])
 
   const productSections = useMemo(() => {
     if (productType !== 'All') {
@@ -534,6 +540,8 @@ export default function Admin() {
       name: product.name,
       price: product.price,
       category: product.category,
+      stickerCategories: product.category === 'Stickers' ? stickerCategories(product) : undefined,
+      stickerClean: product.category === 'Stickers' ? stickerHasNoCussWords(product) : undefined,
       imageUrl: product.imageUrl ?? '',
       inventoryQuantity: product.inventoryQuantity ?? null,
       optionGroups: product.optionGroups,
@@ -559,6 +567,8 @@ export default function Admin() {
         name,
         price: Number(editForm.price),
         category: editForm.category,
+        stickerCategories: editForm.category === 'Stickers' ? editForm.stickerCategories : [],
+        stickerClean: editForm.category === 'Stickers' ? editForm.stickerClean : false,
         imageUrl: editForm.imageUrl.trim() || undefined,
         inventoryQuantity: editForm.inventoryQuantity,
         optionGroups: editForm.optionGroups,
@@ -897,6 +907,8 @@ export default function Admin() {
                 </div>
               </fieldset>
 
+              {form.category === 'Stickers' && <StickerCategoryEditor value={form.stickerCategories ?? []} onChange={stickerCategories => setForm(f => ({ ...f, stickerCategories }))} clean={form.stickerClean ?? false} onCleanChange={stickerClean => setForm(f => ({ ...f, stickerClean }))} />}
+
               {form.category === 'Canvas' && (
                 <CanvasPriceEditor
                   price={form.price}
@@ -1082,6 +1094,8 @@ export default function Admin() {
                 </div>
               </fieldset>
 
+              {editForm.category === 'Stickers' && <StickerCategoryEditor value={editForm.stickerCategories ?? []} onChange={stickerCategories => setEditForm(f => f ? { ...f, stickerCategories } : f)} clean={editForm.stickerClean ?? false} onCleanChange={stickerClean => setEditForm(f => f ? { ...f, stickerClean } : f)} />}
+
               {editForm.category === 'Canvas' && (
                 <CanvasPriceEditor
                   price={editForm.price}
@@ -1182,6 +1196,11 @@ export default function Admin() {
                 )
               })}
             </div>
+
+            {productType === 'Stickers' && <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Filter manager stickers by theme">
+              <button type="button" onClick={() => setStickerTheme(null)} aria-pressed={!stickerTheme} className={`min-h-10 rounded-full px-3 text-sm font-bold ${!stickerTheme ? 'bg-pink text-white' : 'border border-line bg-ink text-cream'}`}>All themes</button>
+              {STICKER_CATEGORIES.map(theme => <button key={theme} type="button" onClick={() => setStickerTheme(stickerTheme === theme ? null : theme)} aria-pressed={stickerTheme === theme} className={`min-h-10 rounded-full px-3 text-sm font-bold ${stickerTheme === theme ? 'bg-pink text-white' : 'border border-line bg-ink text-cream'}`}>{theme}</button>)}
+            </div>}
 
             {filteredProducts.length === 0 ? (
               <p className="mt-4 rounded-2xl border border-dashed border-line bg-ink px-4 py-8 text-center text-sm text-mute">

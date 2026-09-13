@@ -86,6 +86,8 @@ export interface CreateProductBody {
   name: string
   price: number
   category: Category
+  stickerCategories?: Product['stickerCategories']
+  stickerClean?: boolean
   tagline?: string
   description?: string
   imageUrl?: string
