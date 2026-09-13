@@ -18,6 +18,11 @@ const previewHtml = renderSeoDocument('/product/test%20%26%20pen', uploadedProdu
 assert.match(previewHtml, /og:image" content="https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/share\/59169e99-4ae7-4877-9a0c-bc4377a6cf98\.jpg"/)
 assert.match(previewHtml, /"image":\["https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/59169e99-4ae7-4877-9a0c-bc4377a6cf98\.jpg"\]/)
 
+const clownProduct = [{ ...products[0], imageUrl: '/uploads/products/74998dd5-0c42-4333-891d-7a29b0d96d3d.jpg' }]
+const clownHtml = renderSeoDocument('/product/test%20%26%20pen', clownProduct)
+assert.match(clownHtml, /og:image" content="https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/share\/74998dd5-0c42-4333-891d-7a29b0d96d3d\.jpg\?v=2"/)
+assert.match(clownHtml, /"image":\["https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/74998dd5-0c42-4333-891d-7a29b0d96d3d\.jpg"\]/)
+
 const html = renderSeoDocument('/product/test%20%26%20pen', products)
 assert.match(html, /Bright &lt;Bold&gt; Pen \| Inkcredible/)
 assert.match(html, /https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/test\.jpg/)
