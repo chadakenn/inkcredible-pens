@@ -13,6 +13,11 @@ const products = [
   { id: 'hidden-product', name: 'Hidden', price: 1, hidden: true },
 ]
 
+const uploadedProduct = [{ ...products[0], imageUrl: '/uploads/products/59169e99-4ae7-4877-9a0c-bc4377a6cf98.jpg' }]
+const previewHtml = renderSeoDocument('/product/test%20%26%20pen', uploadedProduct)
+assert.match(previewHtml, /og:image" content="https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/share\/59169e99-4ae7-4877-9a0c-bc4377a6cf98\.jpg"/)
+assert.match(previewHtml, /"image":\["https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/59169e99-4ae7-4877-9a0c-bc4377a6cf98\.jpg"\]/)
+
 const html = renderSeoDocument('/product/test%20%26%20pen', products)
 assert.match(html, /Bright &lt;Bold&gt; Pen \| Inkcredible/)
 assert.match(html, /https:\/\/inkcredible\.kennedyshome\.com\/uploads\/products\/test\.jpg/)

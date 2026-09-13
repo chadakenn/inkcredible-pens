@@ -2,12 +2,20 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readProducts } from './catalog.mjs'
+import sharp from 'sharp'
+import { PRODUCT_UPLOAD_DIR } from './uploads.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const INDEX_FILE = path.resolve(__dirname, '../dist/index.html')
 const ORIGIN = 'https://inkcredible.kennedyshome.com'
 const DEFAULT_IMAGE = `${ORIGIN}/inkcredible-main-logo.jpg`
 const META_PATTERN = /<!-- SEO_META_START -->[\s\S]*?<!-- SEO_META_END -->/
+const LOCAL_PRODUCT_IMAGE = /^\/uploads\/products\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif))$/i
+
+function shareImageUrl(imageUrl) {
+  const match = String(imageUrl || '').match(LOCAL_PRODUCT_IMAGE)
+  return match ? `${ORIGIN}/uploads/products/share/${match[1]}` : absoluteUrl(imageUrl)
+}
 
 const PAGE_META = new Map([
   ['/', ['Inkcredible Pens', 'Handmade pens, stickers, car freshies, canvas prints, and custom graphics from Inkcredible.']],
@@ -57,12 +65,12 @@ function absoluteUrl(value, fallback = DEFAULT_IMAGE) {
   }
 }
 
-function metaBlock({ title, description, pathname, image = DEFAULT_IMAGE, type = 'website', structuredData, noindex = false }) {
+function metaBlock({ title, description, pathname, image = DEFAULT_IMAGE, shareImage = image, type = 'website', structuredData, noindex = false }) {
   const canonical = `${ORIGIN}${pathname === '/' ? '/' : pathname}`
   const safeTitle = htmlEscape(title)
   const safeDescription = htmlEscape(description)
   const safeCanonical = htmlEscape(canonical)
-  const safeImage = htmlEscape(absoluteUrl(image))
+  const safeImage = htmlEscape(absoluteUrl(shareImage))
   const data = structuredData || {
     '@context': 'https://schema.org',
     '@type': 'OnlineStore',
@@ -87,6 +95,8 @@ function metaBlock({ title, description, pathname, image = DEFAULT_IMAGE, type =
     <meta property="og:description" content="${safeDescription}" />
     <meta property="og:url" content="${safeCanonical}" />
     <meta property="og:image" content="${safeImage}" />
+    <meta property="og:image:alt" content="${htmlEscape(title)}" />
+    ${shareImage !== image ? '<meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />' : ''}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${safeTitle}" />
     <meta name="twitter:description" content="${safeDescription}" />
@@ -147,7 +157,7 @@ export function renderSeoDocument(pathname, products = readProducts()) {
         availability,
       },
     }
-    return index.replace(META_PATTERN, metaBlock({ title, description, pathname: canonicalPath, image, type: 'product', structuredData }))
+    return index.replace(META_PATTERN, metaBlock({ title, description, pathname: canonicalPath, image, shareImage: shareImageUrl(product.imageUrl), type: 'product', structuredData }))
   }
 
   if (productId) {
@@ -209,6 +219,24 @@ ${items}
 }
 
 export function mountSeo(app) {
+  // Facebook's landscape link cards crop portrait product photos. Fit the entire
+  // original into a wide card; never change the storefront or Merchant image.
+  app.get('/uploads/products/share/:name', async (req, res, next) => {
+    const name = String(req.params.name || '')
+    if (!LOCAL_PRODUCT_IMAGE.test(`/uploads/products/${name}`)) return res.sendStatus(404)
+    try {
+      const image = await sharp(path.join(PRODUCT_UPLOAD_DIR, name), { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize(1140, 570, { fit: 'contain', background: '#f5f5f5' })
+        .extend({ top: 30, bottom: 30, left: 30, right: 30, background: '#f5f5f5' })
+        .jpeg({ quality: 85 })
+        .toBuffer()
+      res.type('jpeg').set('Cache-Control', 'public, max-age=86400').send(image)
+    } catch (error) {
+      if (error.code === 'ENOENT') return res.sendStatus(404)
+      next(error)
+    }
+  })
   app.get('/sitemap.xml', (_req, res) => {
     res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(sitemapXml())
   })
