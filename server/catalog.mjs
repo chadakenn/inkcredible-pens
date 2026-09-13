@@ -25,6 +25,7 @@ export const CATALOG_FILE = path.join(CATALOG_DIR, "products.json")
 export const CATALOG_SEED_FILE = path.join(__dirname, "catalog-seed.json")
 export const SAFE_RESET_FILE = path.join(CATALOG_DIR, "products-reset.json")
 
+const STICKER_CATEGORIES = new Set(["Funny & Sarcastic", "Mental Health & Self-Care", "ADHD & Neurospicy", "Faith & Encouragement", "Animals & Critters", "Work & Adulting", "Witchy & Spooky", "More stickers"])
 const CATEGORIES = new Set(["Pens", "Stickers", "Car Freshies", "Canvas", "Custom"])
 const ART_TYPES = new Set([
   "pen",
@@ -264,6 +265,14 @@ export function validateProductShape(body, { partial = false } = {}) {
       }
     }
   }
+  if (Object.prototype.hasOwnProperty.call(body, "stickerCategories")) {
+    if (!Array.isArray(body.stickerCategories) || body.stickerCategories.length > STICKER_CATEGORIES.size || new Set(body.stickerCategories).size !== body.stickerCategories.length || body.stickerCategories.some((value) => !STICKER_CATEGORIES.has(value))) errors.push("invalid_stickerCategories")
+    else out.stickerCategories = body.stickerCategories
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "stickerClean")) {
+    if (typeof body.stickerClean !== "boolean") errors.push("invalid_stickerClean")
+    else out.stickerClean = body.stickerClean
+  }
   if (Object.prototype.hasOwnProperty.call(body, "optionGroups")) {
     out.optionGroups = normalizeOptionGroups(body.optionGroups, errors)
   }
@@ -360,6 +369,8 @@ export function mountCatalog(app) {
     if (out.imageUrl !== undefined) product.imageUrl = out.imageUrl
     if (out.inventoryQuantity !== undefined) product.inventoryQuantity = out.inventoryQuantity
     if (out.optionGroups !== undefined) product.optionGroups = out.optionGroups
+    if (out.category === "Stickers" && out.stickerCategories !== undefined) product.stickerCategories = out.stickerCategories
+    if (out.category === "Stickers" && out.stickerClean !== undefined) product.stickerClean = out.stickerClean
 
     products.unshift(product)
     writeAtomic(products)

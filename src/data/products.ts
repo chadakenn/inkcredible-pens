@@ -72,6 +72,8 @@ export interface Product {
   id: string
   name: string
   category: Category
+  stickerCategories?: import('./stickerCategories').StickerCategory[]
+  stickerClean?: boolean
   price: number
   tagline: string
   description: string
