@@ -24,8 +24,10 @@ export const CATALOG_DIR = path.resolve(__dirname, "../data/catalog")
 export const CATALOG_FILE = path.join(CATALOG_DIR, "products.json")
 export const CATALOG_SEED_FILE = path.join(__dirname, "catalog-seed.json")
 export const SAFE_RESET_FILE = path.join(CATALOG_DIR, "products-reset.json")
+const STICKER_TAGS_FILE = path.join(__dirname, "sticker-tags-v1.json")
+const STICKER_TAGS_APPLIED_FILE = path.join(CATALOG_DIR, ".sticker-tags-v1-applied.json")
 
-const STICKER_CATEGORIES = new Set(["Funny & Sarcastic", "Mental Health & Self-Care", "ADHD & Neurospicy", "Faith & Encouragement", "Animals & Critters", "Work & Adulting", "Witchy & Spooky", "More stickers"])
+const STICKER_CATEGORIES = new Set(["Funny & Sarcastic", "Mental Health & Self-Care", "ADHD & Neurospicy", "Faith & Encouragement", "Animals & Critters", "Work & Adulting", "For the Guys", "Witchy & Spooky", "More stickers"])
 const CATEGORIES = new Set(["Pens", "Stickers", "Car Freshies", "Canvas", "Custom"])
 const ART_TYPES = new Set([
   "pen",
@@ -131,6 +133,28 @@ function ensureCatalogFile() {
     console.error("[catalog] seed copy failed, writing empty", err)
     writeAtomic(seed)
   }
+}
+
+// Apply reviewed title assignments once to the persistent live catalog. Respect any
+// categories a manager already set, and never reapply after later manager edits.
+export function applyReviewedStickerTags() {
+  ensureCatalogFile()
+  if (existsSync(STICKER_TAGS_APPLIED_FILE)) return 0
+  const current = readJsonFile(CATALOG_FILE)
+  const products = Array.isArray(current) ? current : current?.products
+  if (!Array.isArray(products)) throw new CorruptJsonError(CATALOG_FILE, new Error("unexpected_shape"))
+  const rows = JSON.parse(readFileSync(STICKER_TAGS_FILE, "utf8"))
+  const byId = new Map(rows.map(row => [row.id, row]))
+  let updated = 0
+  for (const product of products) {
+    const row = byId.get(product.id)
+    if (product.category !== "Stickers" || !row || product.name !== row.name || product.stickerCategories?.length) continue
+    product.stickerCategories = row.stickerCategories
+    updated += 1
+  }
+  if (updated) writeJsonAtomic(CATALOG_FILE, Array.isArray(current) ? products : { ...current, products }, { keepBackups: 5 })
+  writeJsonAtomic(STICKER_TAGS_APPLIED_FILE, { applied: true, updated }, { keepBackups: 0 })
+  return updated
 }
 
 function hasExternalProductImages(products) {
@@ -293,6 +317,7 @@ export function validateProductShape(body, { partial = false } = {}) {
  */
 export function mountCatalog(app) {
   ensureCatalogFile()
+  applyReviewedStickerTags()
   ensureSafeResetFile()
 
   app.get("/api/catalog", (_req, res) => {
