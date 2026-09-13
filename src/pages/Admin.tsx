@@ -47,6 +47,7 @@ import {
   type NewProductInput,
 } from '../store/catalog'
 import { useScents } from '../store/scents'
+import { groupScents } from '../data/scentCategories'
 import LogoMark from '../components/LogoMark'
 import OrdersPanel from '../components/admin/OrdersPanel'
 import ManagerDashboard from '../components/admin/ManagerDashboard'
@@ -1505,7 +1506,9 @@ export default function Admin() {
                 No scents yet — add one above so customers can pick.
               </li>
             )}
-            {scents.map((s) => (
+            {groupScents(scents).flatMap(([category, names]) => [
+              <li key={`heading-${category}`} className="col-span-full mt-3 border-b border-line pb-2 font-display text-xl text-cyan">{category} <span className="text-sm text-mute">({names.length})</span></li>,
+              ...names.map((s) => (
               <li
                 key={s}
                 className="rounded-xl border border-line bg-ink p-4 transition-colors hover:border-cyan/40"
@@ -1615,7 +1618,7 @@ export default function Admin() {
                   </div>
                 )}
               </li>
-            ))}
+            ))])}
           </ul></div>
         </div>
       )}
