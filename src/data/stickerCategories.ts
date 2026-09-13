@@ -26,7 +26,7 @@ export function suggestStickerCategories(product: Pick<Product, 'name' | 'taglin
   add('Animals & Critters', /\bcat\b|\bdog\b|\bfrog\b|raccoon|goose|opossum|unicorn|\bduck\b|\bbat\b|\bbird\b|\bbunny\b|\bfox\b|dino|squirrel|panda|llama|chick|pecker/)
   add('Work & Adulting', /\bwork\b|job|boss|employee|coworker|email|paycheck|bill|adulting|grown.up|spreadsheet|password|coffee|caffein|meeting|retirement|money|amazon|order|weld|jobsite|to.do|procrastinat/)
   add('Witchy & Spooky', /witch|spooky|ghost|skeleton|voodoo|\bmagic\b|halloween|haunt|coffin|\bspirit\b|smudge|scare|spell|broom|skull|grave|dark humor/)
-  add('For the Guys', /\bdad\b|husband|\bbeard\b|morning wood|motor boat captain|only boost|only welders|mudflap man|weekend hooker|needs head|choked a cougar|racks big|butt rubbed|pork pulled|hunky|\bman card\b/)
+  add('For the Guys', /\bdad\b|husband|\bbeard\b|morning wood|motor boat captain|only boost|only welders|mudflap man|weekend hooker|needs head|choked a cougar|racks big|butt rubbed|pork pulled|hunky|\bman card\b|just one more gun|gun lover/)
   add('Funny & Sarcastic', /fk|fuck|shit|bitch|ass|sarcas|funny|joke|wtf|unhinged|chaos|hot mess|bull|prick|silly|trash|shenanigan|no f|freakin|hell|delulu|don't care|don't give|rude|petty|dramatic|damn|sarcastic/)
   return matches.length ? matches : ['More stickers']
 }
