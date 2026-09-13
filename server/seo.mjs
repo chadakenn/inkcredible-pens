@@ -11,14 +11,26 @@ const ORIGIN = 'https://inkcredible.kennedyshome.com'
 const DEFAULT_IMAGE = `${ORIGIN}/inkcredible-main-logo.jpg`
 const META_PATTERN = /<!-- SEO_META_START -->[\s\S]*?<!-- SEO_META_END -->/
 const LOCAL_PRODUCT_IMAGE = /^\/uploads\/products\/([a-f0-9-]{36}\.(?:jpe?g|png|webp|gif))$/i
-const DARK_SHARE_IMAGE = '74998dd5-0c42-4333-891d-7a29b0d96d3d.jpg'
 
 function shareImageUrl(imageUrl) {
   const match = String(imageUrl || '').match(LOCAL_PRODUCT_IMAGE)
   if (!match) return absoluteUrl(imageUrl)
   const url = `${ORIGIN}/uploads/products/share/${match[1]}`
-  // Give Facebook a new URL so it fetches the updated preview instead of its cached copy.
-  return match[1] === DARK_SHARE_IMAGE ? `${url}?v=2` : url
+  // Refresh existing social caches when the preview design changes.
+  return `${url}?v=3`
+}
+
+export async function renderProductShareImage(source) {
+  // The original art is always contained, never cropped. A darkened, blurred
+  // cover of that same art fills any unused space in the wide social card.
+  const backdrop = await sharp(source, { limitInputPixels: 40_000_000 })
+    .rotate().resize(1200, 630, { fit: 'cover' }).blur(28)
+    .modulate({ brightness: 0.4 }).linear(0.75).jpeg({ quality: 85 }).toBuffer()
+  const artwork = await sharp(source, { limitInputPixels: 40_000_000 })
+    .rotate().resize(1140, 570, { fit: 'contain', background: '#00000000' })
+    .png().toBuffer()
+  return sharp(backdrop).composite([{ input: artwork, left: 30, top: 30 }])
+    .jpeg({ quality: 88 }).toBuffer()
 }
 
 const PAGE_META = new Map([
@@ -223,33 +235,12 @@ ${items}
 }
 
 export function mountSeo(app) {
-  // Facebook's landscape link cards crop portrait product photos. Fit the entire
-  // original into a wide card; never change the storefront or Merchant image.
+  // Keep every product's original photo intact while filling the wide social card.
   app.get('/uploads/products/share/:name', async (req, res, next) => {
     const name = String(req.params.name || '')
     if (!LOCAL_PRODUCT_IMAGE.test(`/uploads/products/${name}`)) return res.sendStatus(404)
     try {
-      const source = path.join(PRODUCT_UPLOAD_DIR, name)
-      let image
-      if (name === DARK_SHARE_IMAGE) {
-        // Preserve every pixel of the product art, with a dark atmospheric fill
-        // behind the portrait instead of the default pale letterbox.
-        const backdrop = await sharp(source, { limitInputPixels: 40_000_000 })
-          .rotate().resize(1200, 630, { fit: 'cover' }).blur(28)
-          .modulate({ brightness: 0.4 }).jpeg({ quality: 85 }).toBuffer()
-        const portrait = await sharp(source, { limitInputPixels: 40_000_000 })
-          .rotate().resize(1140, 570, { fit: 'contain', background: '#00000000' })
-          .png().toBuffer()
-        image = await sharp(backdrop).composite([{ input: portrait, left: 30, top: 30 }])
-          .jpeg({ quality: 88 }).toBuffer()
-      } else {
-        image = await sharp(source, { limitInputPixels: 40_000_000 })
-          .rotate()
-          .resize(1140, 570, { fit: 'contain', background: '#f5f5f5' })
-          .extend({ top: 30, bottom: 30, left: 30, right: 30, background: '#f5f5f5' })
-          .jpeg({ quality: 85 })
-          .toBuffer()
-      }
+      const image = await renderProductShareImage(path.join(PRODUCT_UPLOAD_DIR, name))
       res.type('jpeg').set('Cache-Control', 'public, max-age=86400').send(image)
     } catch (error) {
       if (error.code === 'ENOENT') return res.sendStatus(404)
