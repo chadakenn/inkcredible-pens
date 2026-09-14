@@ -1,24 +1,34 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, ImagePlus, Upload } from 'lucide-react'
+import { ArrowLeft, ImagePlus, ShoppingBag, Upload } from 'lucide-react'
+import type { Product } from '../data/products'
 import GraphicsLogo from '../components/GraphicsLogo'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
-import { uploadCustomArtwork, validateCustomArtworkFile } from '../lib/uploadCustomArtwork'
+import { useCart } from '../store/cart'
+import { sanitizeCustomMeta, uploadCustomArtwork, validateCustomArtworkFile } from '../lib/uploadCustomArtwork'
+
+const PRICE_PER_SQFT = 12
+const MINIMUM_PRICE = 15
 
 export default function CustomVehicleDecals() {
   useDocumentTitle('Large custom prints')
+  const addItem = useCart((s) => s.addItem)
   const [width, setWidth] = useState('')
   const [height, setHeight] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [notes, setNotes] = useState('')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [art, setArt] = useState<{ id: string; url: string; fileName: string } | null>(null)
+  const [art, setArt] = useState<{ id: string; url: string; fileName: string; previewData?: string } | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
-  const [code, setCode] = useState('')
+
+  const widthIn = Number(width)
+  const heightIn = Number(height)
+  const qty = Number(quantity)
+  const validSize = Number.isFinite(widthIn) && Number.isFinite(heightIn) && widthIn > 0 && heightIn > 0 && widthIn <= 600 && heightIn <= 600
+  const squareFeet = validSize ? (widthIn * heightIn) / 144 : 0
+  const unitPrice = useMemo(() => validSize ? Math.round(Math.max(MINIMUM_PRICE, squareFeet * PRICE_PER_SQFT) * 100) / 100 : MINIMUM_PRICE, [validSize, squareFeet])
+  const total = unitPrice * (Number.isInteger(qty) && qty > 0 ? qty : 1)
 
   useEffect(() => () => { if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview) }, [preview])
 
@@ -30,57 +40,61 @@ export default function CustomVehicleDecals() {
     setUploading(true)
     setArt(null)
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview)
-    setPreview(null)
+    const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name)
+    const localPreview = isSvg ? null : URL.createObjectURL(file)
+    setPreview(localPreview)
+    const dataUrlPromise = new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result || ''))
+      reader.onerror = () => resolve('')
+      reader.readAsDataURL(file)
+    })
     try {
-      const uploaded = await uploadCustomArtwork(file)
-      setArt({ id: uploaded.id, url: uploaded.url, fileName: uploaded.fileName })
-      setPreview(uploaded.previewDataUrl || (file.type === 'image/svg+xml' ? null : URL.createObjectURL(file)))
+      const [uploaded, dataUrl] = await Promise.all([uploadCustomArtwork(file), dataUrlPromise])
+      const safePreview = uploaded.previewDataUrl || (dataUrl.length < 400_000 ? dataUrl : '')
+      setArt({ id: uploaded.id, url: uploaded.url, fileName: uploaded.fileName, previewData: safePreview || undefined })
+      if (uploaded.previewDataUrl) {
+        if (localPreview) URL.revokeObjectURL(localPreview)
+        setPreview(uploaded.previewDataUrl)
+      }
     } catch (err) {
+      if (localPreview) URL.revokeObjectURL(localPreview)
+      setPreview(null)
       setError(err instanceof Error ? err.message : 'Could not upload your image.')
     } finally { setUploading(false) }
   }
 
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    if (sending || uploading) return
-    const w = Number(width), h = Number(height), qty = Number(quantity)
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0 || w > 600 || h > 600 ||
-        !Number.isInteger(qty) || qty < 1 || qty > 20) {
-      setError('Enter a width and height up to 600 inches and a quantity from 1 to 20.')
-      return
-    }
+  function addToCart() {
+    if (!validSize) { setError('Enter a width and height up to 600 inches.'); return }
+    if (!Number.isInteger(qty) || qty < 1 || qty > 20) { setError('Enter a quantity from 1 to 20.'); return }
     if (!art) { setError('Upload the image you want printed.'); return }
     setError('')
-    setSending(true)
-    try {
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer: { name: name.trim(), email: email.trim() },
-          items: [{
-            name: 'Large custom print',
-            qty,
-            estimate: 0,
-            custom: {
-              type: 'large-print',
-              estimateOnly: true,
-              printWidthIn: w,
-              printHeightIn: h,
-              printNotes: notes.trim(),
-              artworkUrl: art.url,
-              artworkId: art.id,
-              artworkFileName: art.fileName,
-            },
-          }],
-        }),
-      })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok || !result.quoteId) throw new Error('Could not send your request. Please try again.')
-      setCode(String(result.quoteId))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send your request.')
-    } finally { setSending(false) }
+    const sizeLabel = `${widthIn}×${heightIn} in`
+    const custom = sanitizeCustomMeta({
+      type: 'large-print',
+      printWidthIn: widthIn,
+      printHeightIn: heightIn,
+      printNotes: notes.trim() || undefined,
+      fileName: art.fileName,
+      logoDataUrl: art.previewData,
+      artworkUrl: art.url,
+      artworkId: art.id,
+      artworkFileName: art.fileName,
+    })
+    const product: Product = {
+      id: `custom-large-print-${Date.now().toString(36)}`,
+      name: `Large Custom Print — ${sizeLabel}`,
+      category: 'Custom',
+      price: unitPrice,
+      tagline: `${sizeLabel} · $12/sq ft · $15 minimum`,
+      description: notes.trim() ? `Large custom print (${sizeLabel}). Notes: ${notes.trim()}` : `Large custom print (${sizeLabel}).`,
+      accent: '#22d3ee',
+      art: 'sticker',
+      imageUrl: art.previewData,
+      badge: 'Custom',
+      custom,
+    }
+    addItem(product, qty)
   }
 
   return <div className="relative overflow-hidden">
@@ -91,10 +105,9 @@ export default function CustomVehicleDecals() {
       <div className="mt-4"><GraphicsLogo size="xl" /></div>
       <p className="mt-6 text-xs font-extrabold uppercase tracking-widest text-cyan">Your image · your size</p>
       <h1 className="mt-2 font-display text-4xl sm:text-5xl">Large Custom Prints</h1>
-      <p className="mt-3 max-w-2xl text-base leading-relaxed text-mute">Enter the finished size and upload the image you want printed. We’ll check the image quality and email you the exact price before anything is printed.</p>
+      <p className="mt-3 max-w-2xl text-base leading-relaxed text-mute">Enter the finished size, upload your image, and order it online. We’ll check image quality and send a proof before printing.</p>
 
-      {code ? <div role="status" className="mt-8 rounded-3xl border border-lime/50 bg-lime/10 p-8 text-center"><CheckCircle2 className="mx-auto h-12 w-12 text-lime" /><h2 className="mt-3 font-display text-2xl">Request received</h2><p className="mt-2 text-mute">Save your quote code: <strong className="text-cream">{code}</strong>. We’ll email you with the price and proof.</p></div> :
-      <form onSubmit={submit} className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <section className="space-y-5 rounded-3xl border border-line bg-ink-2 p-5 sm:p-7">
           <h2 className="font-display text-2xl">1. Pick the size</h2>
           <div className="grid grid-cols-2 gap-3">
@@ -102,8 +115,14 @@ export default function CustomVehicleDecals() {
             <label className="block text-sm font-bold">Height (inches)<input required inputMode="decimal" type="number" min="0.1" max="600" step="0.1" value={height} onChange={e=>setHeight(e.target.value)} placeholder="18" className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-cream" /></label>
           </div>
           <label className="block text-sm font-bold">Quantity<input required inputMode="numeric" type="number" min="1" max="20" step="1" value={quantity} onChange={e=>setQuantity(e.target.value)} className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-cream" /></label>
-          <label className="block text-sm font-bold">Anything else? <span className="font-normal text-mute">(optional)</span><textarea rows={4} maxLength={1200} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Material, colors, cut shape, deadline, or other details…" className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-cream" /></label>
-          <div className="rounded-2xl border border-cyan/30 bg-cyan/10 p-4"><p className="font-bold text-cyan">Exact price by email</p><p className="mt-1 text-sm text-mute">Large prints are priced by finished size, material, quantity, and artwork. There is no payment today.</p></div>
+          <label className="block text-sm font-bold">Anything else? <span className="font-normal text-mute">(optional)</span><textarea rows={4} maxLength={1200} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Cut shape, deadline, colors, or other details…" className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-cream" /></label>
+
+          <div className="rounded-2xl border border-lime/40 bg-lime/10 p-5">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-lime">Your price</p>
+            <p className="mt-1 font-display text-4xl text-lime">${total.toFixed(2)}</p>
+            <p className="mt-2 text-sm text-mute">{validSize ? `${squareFeet.toFixed(2)} sq ft × $${PRICE_PER_SQFT}${qty > 1 ? ` × ${qty} prints` : ''}` : `$${MINIMUM_PRICE} minimum per print`}</p>
+            {validSize && unitPrice === MINIMUM_PRICE && <p className="mt-1 text-xs text-mute">The $15 minimum applies to this size.</p>}
+          </div>
         </section>
 
         <section className="space-y-5 rounded-3xl border border-line bg-ink-2 p-5 sm:p-7">
@@ -114,13 +133,11 @@ export default function CustomVehicleDecals() {
           </label>
           {uploading && <p role="status" className="text-sm font-bold text-cyan">Uploading image…</p>}
           {art && <div className="flex items-center gap-2 rounded-xl border border-line bg-ink p-3 text-sm text-lime"><ImagePlus className="h-4 w-4 shrink-0" /><span className="min-w-0 break-all">{art.fileName}</span></div>}
-          <h2 className="pt-2 font-display text-2xl">3. Where should we send the quote?</h2>
-          <label className="block text-sm font-bold">Your name<input required maxLength={120} value={name} onChange={e=>setName(e.target.value)} autoComplete="name" className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-cream" /></label>
-          <label className="block text-sm font-bold">Email<input required type="email" maxLength={180} value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" className="mt-2 w-full rounded-xl border border-line bg-ink p-3 text-cream" /></label>
+          <div className="rounded-xl border border-cyan/30 bg-cyan/10 p-4 text-sm text-mute">Printed on durable vinyl. We’ll contact you if the uploaded image is too small for the requested print size.</div>
           {error && <p role="alert" className="rounded-xl border border-pink/40 bg-pink/10 p-3 text-sm font-bold text-pink">{error}</p>}
-          <button disabled={sending||uploading} className="btn-primary min-h-12 w-full disabled:opacity-50" type="submit">{sending?'Sending request…':'Get my free quote'}</button>
+          <button disabled={uploading} onClick={addToCart} className="btn-primary min-h-12 w-full disabled:opacity-50" type="button"><ShoppingBag className="h-5 w-5" /> Add to cart · ${total.toFixed(2)}</button>
         </section>
-      </form>}
+      </div>
     </div>
   </div>
 }

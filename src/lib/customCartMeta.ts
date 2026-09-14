@@ -8,6 +8,9 @@ import type { CustomLogoMeta, Product } from '../data/products'
 /** One-line cart/checkout meta for any custom configurator line */
 export function formatCustomCartMeta(custom: CustomLogoMeta | undefined): string | null {
   if (!custom) return null
+  if (custom.type === 'large-print') {
+    return `${custom.printWidthIn}×${custom.printHeightIn} in`
+  }
   if (custom.type === 'banner' || custom.bannerSizeLabel) {
     return formatBannerCartMeta(custom.bannerSizeLabel, custom.bannerSides)
   }
@@ -40,6 +43,7 @@ export function isUniqueCustomLine(product: Product): boolean {
   const c = product.custom
   return (
     Boolean(c?.style) ||
+    c?.type === 'large-print' ||
     c?.type === 'banner' ||
     c?.type === 'canvas' ||
     c?.type === 'logo' ||
@@ -47,6 +51,7 @@ export function isUniqueCustomLine(product: Product): boolean {
     c?.type === 'thank-you-cards' ||
     c?.type === 'photo-freshie' ||
     product.id.startsWith('custom-logo-sticker') ||
+    product.id.startsWith('custom-large-print') ||
     product.id.startsWith('custom-banner') ||
     product.id.startsWith('custom-canvas') ||
     product.id.startsWith('custom-business-cards') ||
