@@ -7,7 +7,7 @@ export interface ReportOrder {
   stripeSessionId?: string
   shippingCents?: number
   archivedAt?: string
-  status: 'new' | 'making' | 'ready' | 'shipped' | 'cancelled'
+  status: 'new' | 'making' | 'ready' | 'picked_up' | 'shipped' | 'cancelled'
   customer: { name: string; email: string }
   items: { name: string; qty: number }[]
 }
