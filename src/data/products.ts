@@ -38,6 +38,10 @@ export interface CustomLogoMeta {
   printWidthIn?: number
   printHeightIn?: number
   printNotes?: string
+  artworkPixelWidth?: number
+  artworkPixelHeight?: number
+  estimatedPrintDpi?: number
+  artworkQuality?: 'vector' | 'good' | 'caution' | 'blurry'
   /** Banner configurator */
   bannerSizeId?: string
   bannerSizeLabel?: string

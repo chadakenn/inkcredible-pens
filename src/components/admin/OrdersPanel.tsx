@@ -95,6 +95,12 @@ function TrackingStatusChip({ order }: { order: Order }) {
 
 function itemMetaLine(custom?: CustomLogoMeta): string | null {
   if (!custom) return null
+  if (custom.type === 'large-print') {
+    const size = `${custom.printWidthIn}×${custom.printHeightIn} in`
+    const pixels = custom.artworkPixelWidth && custom.artworkPixelHeight ? ` · ${custom.artworkPixelWidth}×${custom.artworkPixelHeight}px` : ''
+    const dpi = custom.estimatedPrintDpi ? ` · ~${custom.estimatedPrintDpi} DPI` : custom.artworkQuality === 'vector' ? ' · Vector' : ''
+    return `${size}${pixels}${dpi}`
+  }
   if (custom.type === 'photo-freshie') {
     return `${custom.photoFreshieSize || '3-inch round'} · Scent: ${custom.freshieScent || 'Not selected'}`
   }

@@ -18,6 +18,7 @@ export default function CustomVehicleDecals() {
   const [quantity, setQuantity] = useState('1')
   const [notes, setNotes] = useState('')
   const [art, setArt] = useState<{ id: string; url: string; fileName: string; previewData?: string } | null>(null)
+  const [imageInfo, setImageInfo] = useState<{ width: number; height: number; vector: boolean } | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
@@ -29,6 +30,13 @@ export default function CustomVehicleDecals() {
   const squareFeet = validSize ? (widthIn * heightIn) / 144 : 0
   const unitPrice = useMemo(() => validSize ? Math.round(Math.max(MINIMUM_PRICE, squareFeet * PRICE_PER_SQFT) * 100) / 100 : MINIMUM_PRICE, [validSize, squareFeet])
   const total = unitPrice * (Number.isInteger(qty) && qty > 0 ? qty : 1)
+  const estimatedDpi = useMemo(() => {
+    if (!validSize || !imageInfo || imageInfo.vector) return null
+    const normal = Math.min(imageInfo.width / widthIn, imageInfo.height / heightIn)
+    const rotated = Math.min(imageInfo.width / heightIn, imageInfo.height / widthIn)
+    return Math.round(Math.max(normal, rotated))
+  }, [validSize, imageInfo, widthIn, heightIn])
+  const quality = imageInfo?.vector ? 'vector' : estimatedDpi == null ? null : estimatedDpi >= 150 ? 'good' : estimatedDpi >= 100 ? 'caution' : 'blurry'
 
   useEffect(() => () => { if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview) }, [preview])
 
@@ -39,10 +47,19 @@ export default function CustomVehicleDecals() {
     setError('')
     setUploading(true)
     setArt(null)
+    setImageInfo(null)
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview)
     const isSvg = file.type === 'image/svg+xml' || /\.svg$/i.test(file.name)
     const localPreview = isSvg ? null : URL.createObjectURL(file)
     setPreview(localPreview)
+    if (isSvg) {
+      setImageInfo({ width: 0, height: 0, vector: true })
+    } else if (localPreview) {
+      const image = new Image()
+      image.onload = () => setImageInfo({ width: image.naturalWidth, height: image.naturalHeight, vector: false })
+      image.onerror = () => setImageInfo(null)
+      image.src = localPreview
+    }
     const dataUrlPromise = new Promise<string>((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve(String(reader.result || ''))
@@ -75,6 +92,10 @@ export default function CustomVehicleDecals() {
       printWidthIn: widthIn,
       printHeightIn: heightIn,
       printNotes: notes.trim() || undefined,
+      artworkPixelWidth: imageInfo && !imageInfo.vector ? imageInfo.width : undefined,
+      artworkPixelHeight: imageInfo && !imageInfo.vector ? imageInfo.height : undefined,
+      estimatedPrintDpi: estimatedDpi ?? undefined,
+      artworkQuality: quality ?? undefined,
       fileName: art.fileName,
       logoDataUrl: art.previewData,
       artworkUrl: art.url,
@@ -133,6 +154,10 @@ export default function CustomVehicleDecals() {
           </label>
           {uploading && <p role="status" className="text-sm font-bold text-cyan">Uploading image…</p>}
           {art && <div className="flex items-center gap-2 rounded-xl border border-line bg-ink p-3 text-sm text-lime"><ImagePlus className="h-4 w-4 shrink-0" /><span className="min-w-0 break-all">{art.fileName}</span></div>}
+          {art && imageInfo && <div className={`rounded-2xl border p-4 ${quality === 'good' || quality === 'vector' ? 'border-lime/40 bg-lime/10' : quality === 'caution' ? 'border-amber-300/50 bg-amber-300/10' : quality === 'blurry' ? 'border-pink/50 bg-pink/10' : 'border-line bg-ink'}`}>
+            <p className={`font-extrabold ${quality === 'good' || quality === 'vector' ? 'text-lime' : quality === 'caution' ? 'text-amber-200' : 'text-pink'}`}>{quality === 'vector' ? 'Excellent — vector artwork' : quality === 'good' ? 'Good print quality' : quality === 'caution' ? 'Use with caution' : quality === 'blurry' ? 'Likely to look blurry' : 'Enter a size to check quality'}</p>
+            {imageInfo.vector ? <p className="mt-1 text-sm text-mute">SVG artwork can scale cleanly to large sizes.</p> : <><p className="mt-1 text-sm text-mute">{imageInfo.width} × {imageInfo.height} pixels{estimatedDpi ? ` · about ${estimatedDpi} DPI at this print size` : ''}</p>{quality === 'caution' && <p className="mt-2 text-xs text-mute">It may look fine from a few feet away, but may appear soft up close.</p>}{quality === 'blurry' && <p className="mt-2 text-xs text-mute">A larger original image is strongly recommended. You can still order, and we’ll review it before printing.</p>}</>}
+          </div>}
           <div className="rounded-xl border border-cyan/30 bg-cyan/10 p-4 text-sm text-mute">Printed on durable vinyl. We’ll contact you if the uploaded image is too small for the requested print size.</div>
           {error && <p role="alert" className="rounded-xl border border-pink/40 bg-pink/10 p-3 text-sm font-bold text-pink">{error}</p>}
           <button disabled={uploading} onClick={addToCart} className="btn-primary min-h-12 w-full disabled:opacity-50" type="button"><ShoppingBag className="h-5 w-5" /> Add to cart · ${total.toFixed(2)}</button>
