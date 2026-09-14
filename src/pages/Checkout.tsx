@@ -158,6 +158,7 @@ export default function Checkout() {
   const [zip, setZip] = useState('')
   const [phone, setPhone] = useState('')
   const [fulfillment, setFulfillment] = useState<'shipping' | 'pickup'>('shipping')
+  const [pickupTermsAccepted, setPickupTermsAccepted] = useState(false)
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
   const [canceledBanner, setCanceledBanner] = useState(false)
@@ -322,6 +323,7 @@ export default function Checkout() {
   const onDemoSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!IS_DEV) return
+    if (fulfillment === 'pickup' && !pickupTermsAccepted) { setPayError('Please confirm the local pickup policy before continuing.'); return }
     if (
       !email.trim() ||
       !fullName.trim() ||
@@ -353,6 +355,10 @@ export default function Checkout() {
 
   const onPayWithStripe = async () => {
     setPayError(null)
+    if (fulfillment === 'pickup' && !pickupTermsAccepted) {
+      setPayError('Please confirm the local pickup policy before continuing.')
+      return
+    }
     if (!contactValid) {
       setPayError('Enter email and full name before paying with Stripe.')
       return
@@ -431,6 +437,7 @@ export default function Checkout() {
 
   const onSubmitQuote = async () => {
     setPayError(null)
+    if (fulfillment === 'pickup' && !pickupTermsAccepted) { setPayError('Please confirm the local pickup policy before continuing.'); return }
     if (!contactValid) { setPayError('Enter your email and full name before requesting the quote.'); return }
     if (!hasQuoteItems) { setPayError('There are no quote items to submit.'); return }
     setPaying(true)
@@ -555,14 +562,14 @@ export default function Checkout() {
           <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
             <legend className="px-1 font-display text-lg">Delivery</legend>
             <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${fulfillment === 'shipping' ? 'border-cyan bg-cyan/10' : 'border-line bg-ink'}`}>
-              <input type="radio" name="fulfillment" value="shipping" checked={fulfillment === 'shipping'} onChange={() => setFulfillment('shipping')} className="mt-1 accent-cyan" />
+              <input type="radio" name="fulfillment" value="shipping" checked={fulfillment === 'shipping'} onChange={() => { setFulfillment('shipping'); setPickupTermsAccepted(false) }} className="mt-1 accent-cyan" />
               <span><strong className="block text-cream">Ship my order</strong><span className="text-xs text-mute">Shipping is calculated below.</span></span>
             </label>
             <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${fulfillment === 'pickup' ? 'border-lime bg-lime/10' : 'border-line bg-ink'}`}>
               <input type="radio" name="fulfillment" value="pickup" checked={fulfillment === 'pickup'} onChange={() => setFulfillment('pickup')} className="mt-1 accent-lime" />
               <span><strong className="block text-cream">Free local pickup</strong><span className="text-xs text-mute">Findlay, Ohio · We’ll email or text when it’s ready.</span></span>
             </label>
-            {fulfillment === 'pickup' && <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone for pickup text (optional)" autoComplete="tel" className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-lime" />}
+            {fulfillment === 'pickup' && <><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone for pickup text (optional)" autoComplete="tel" className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-lime" /><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-lime/35 bg-lime/10 p-4 text-sm leading-relaxed text-mute"><input type="checkbox" checked={pickupTermsAccepted} onChange={(e) => setPickupTermsAccepted(e.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-lime" /><span>I understand this order is for local pickup in Findlay, Ohio. If I later request shipping, I must pay the shipping charge before my order can be mailed.</span></label></>}
           </fieldset>
 
           {fulfillment === 'shipping' && <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">

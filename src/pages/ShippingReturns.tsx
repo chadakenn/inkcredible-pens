@@ -1,4 +1,4 @@
-import { ArrowLeft, Mail, PackageCheck, RotateCcw, Sparkles, Truck } from 'lucide-react'
+import { ArrowLeft, Mail, MapPin, PackageCheck, RotateCcw, Sparkles, Truck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -19,19 +19,25 @@ export default function ShippingReturns() {
         Everything is packed by a real small business in Ohio. Here is what to expect after you order and what to do if something is not right.
       </p>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+      <div className="mt-8 grid gap-4 md:grid-cols-3">
         <article className="rounded-3xl border border-cyan/35 bg-ink-2 p-5 sm:p-6">
           <Truck className="h-7 w-7 text-cyan" />
           <h2 className="mt-3 font-display text-2xl text-cream">Shipping</h2>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-mute">
-            <li><strong className="text-cream">United States:</strong> $8 flat-rate standard shipping; $15 for carts with canvas.</li>
-            <li><strong className="text-cream">Free shipping:</strong> Orders of $60 or more without canvas. Canvas shipping applies even above $60.</li>
+            <li><strong className="text-cream">United States:</strong> $8 flat-rate standard shipping; $15 for carts with canvas or large custom prints.</li>
+            <li><strong className="text-cream">Free shipping:</strong> Orders of $60 or more without canvas or large custom prints. Oversized-item shipping applies even above $60.</li>
             <li><strong className="text-cream">Tracking:</strong> We email tracking information when your order ships.</li>
           </ul>
         </article>
 
         <article className="rounded-3xl border border-lime/35 bg-ink-2 p-5 sm:p-6">
-          <Sparkles className="h-7 w-7 text-lime" />
+          <MapPin className="h-7 w-7 text-lime" />
+          <h2 className="mt-3 font-display text-2xl text-cream">Free local pickup</h2>
+          <p className="mt-4 text-sm leading-relaxed text-mute">Free pickup is available in Findlay, Ohio. Pickup orders do not include shipping. We’ll email or text when the order is ready. If shipping is requested after checkout, the applicable shipping charge must be paid before the order will be mailed.</p>
+        </article>
+
+        <article className="rounded-3xl border border-lavender/35 bg-ink-2 p-5 sm:p-6">
+          <Sparkles className="h-7 w-7 text-lavender" />
           <h2 className="mt-3 font-display text-2xl text-cream">Made to order</h2>
           <p className="mt-4 text-sm leading-relaxed text-mute">
             Many Inkcredible products are handmade or personalized. Production time varies by item and order size. Custom-project timing is confirmed with you before final production.
@@ -51,7 +57,7 @@ export default function ShippingReturns() {
           </div>
           <div>
             <h3 className="font-bold text-cream">Custom and personalized products</h3>
-            <p className="mt-1">Custom or personalized items cannot be returned unless they arrive damaged, defective, or different from the approved order.</p>
+            <p className="mt-1">Custom and personalized products are final sale once production begins. Refunds or replacements remain available if an item arrives damaged, is defective, or differs materially from the approved design or order.</p>
           </div>
           <div>
             <h3 className="font-bold text-cream">Damage or order problems</h3>
