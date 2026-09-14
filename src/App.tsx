@@ -76,6 +76,7 @@ export default function App() {
           <Route path="/canvas" element={<CategoryPage category="Canvas" />} />
           <Route path="/custom" element={<CategoryPage category="Custom" />} />
           <Route path="/custom/logo-stickers" element={<CustomLogoStickers />} />
+          <Route path="/custom/large-prints" element={<CustomVehicleDecals />} />
           <Route path="/custom/vehicle-decals" element={<CustomVehicleDecals />} />
           <Route path="/custom/banners" element={<CustomBanners />} />
           <Route path="/custom/canvas" element={<CustomCanvas />} />

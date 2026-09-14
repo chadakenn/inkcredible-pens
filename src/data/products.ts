@@ -1,7 +1,7 @@
 export type Category = 'Pens' | 'Stickers' | 'Car Freshies' | 'Canvas' | 'Custom'
 
 /** Custom cart-line meta (logo stickers, banners, canvas, business cards, freshie scent). */
-export type CustomLineType = 'logo' | 'banner' | 'canvas' | 'business-cards' | 'thank-you-cards' | 'photo-freshie' | 'vehicle-decal'
+export type CustomLineType = 'logo' | 'banner' | 'canvas' | 'business-cards' | 'thank-you-cards' | 'photo-freshie' | 'large-print'
 
 export interface CustomLogoMeta {
   /** Discriminator for custom configurator lines */
@@ -34,12 +34,10 @@ export interface CustomLogoMeta {
   photoFreshieSize?: string
   /** Permanent paid-order archive path, populated by the server. */
   archivedArtworkPath?: string
-  /** Large vehicle decal quote request */
-  vehicleType?: string
-  decalPlacement?: string
-  decalWidthIn?: number
-  decalHeightIn?: number
-  decalNotes?: string
+  /** Large custom print quote request */
+  printWidthIn?: number
+  printHeightIn?: number
+  printNotes?: string
   /** Banner configurator */
   bannerSizeId?: string
   bannerSizeLabel?: string

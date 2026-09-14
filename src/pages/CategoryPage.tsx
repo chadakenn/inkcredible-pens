@@ -72,9 +72,9 @@ function nameStartsWithLetter(name: string, letter: string): boolean {
 
 const studioCards = [
   {
-    to: '/custom/vehicle-decals',
-    title: 'Large vehicle decals',
-    blurb: 'Door logos, window lettering, and big custom graphics for your ride — request a free quote.',
+    to: '/custom/large-prints',
+    title: 'Large custom prints',
+    blurb: 'Enter any large print size, upload your image, and request a free quote.',
     label: 'Free quote',
     labelClass: 'text-cyan',
     border: 'border-cyan/40 hover:border-cyan/70',
