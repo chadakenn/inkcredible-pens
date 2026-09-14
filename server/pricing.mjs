@@ -12,10 +12,12 @@ const CATALOG_SEED = path.join(__dirname, 'catalog-seed.json')
 
 export const FLAT_SHIPPING_CENTS = 800
 export const CANVAS_SHIPPING_CENTS = 1500
+export const LARGE_PRINT_SHIPPING_CENTS = 1500
 export const FREE_SHIPPING_THRESHOLD_CENTS = 6000
 
-export function shippingCentsForSubtotal(subtotalCents, hasCanvas = false) {
+export function shippingCentsForSubtotal(subtotalCents, hasCanvas = false, hasLargePrint = false) {
   if (hasCanvas) return CANVAS_SHIPPING_CENTS
+  if (hasLargePrint) return LARGE_PRINT_SHIPPING_CENTS
   const cents = Math.max(0, Math.round(Number(subtotalCents) || 0))
   return cents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
 }
@@ -265,9 +267,34 @@ function baseCatalogId(productId) {
   return id
 }
 
+function priceLargePrint(config) {
+  const widthIn = Number(config?.printWidthIn)
+  const heightIn = Number(config?.printHeightIn)
+  if (!Number.isFinite(widthIn) || !Number.isFinite(heightIn) || widthIn <= 0 || heightIn <= 0 || widthIn > 600 || heightIn > 600) {
+    throw Object.assign(new Error('invalid_large_print_size'), { code: 'invalid_large_print_size' })
+  }
+  const unitDollars = roundMoney(Math.max(15, (widthIn * heightIn / 144) * 12))
+  return {
+    unitDollars,
+    lineName: 'Large Custom Print',
+    description: `${widthIn}×${heightIn} in`,
+    custom: {
+      type: 'large-print',
+      printWidthIn: widthIn,
+      printHeightIn: heightIn,
+      ...(config?.printNotes ? { printNotes: String(config.printNotes).slice(0, 1200) } : {}),
+      ...(config?.artworkUrl ? { artworkUrl: config.artworkUrl } : {}),
+      ...(config?.artworkId ? { artworkId: config.artworkId } : {}),
+      ...(config?.artworkFileName ? { artworkFileName: String(config.artworkFileName).slice(0, 240) } : {}),
+      ...(config?.fileName ? { fileName: String(config.fileName).slice(0, 240) } : {}),
+    },
+  }
+}
+
 function detectCustomKind(productId, config) {
   const id = String(productId || '')
   const c = config && typeof config === 'object' ? config : {}
+  if (c.type === 'large-print' || id.startsWith('custom-large-print')) return 'large-print'
   if (c.type === 'photo-freshie' || id.startsWith('custom-photo-freshie')) return 'photo-freshie'
   if (c.type === 'logo' || c.style || id.startsWith('custom-logo-sticker')) return 'logo'
   if (c.type === 'banner' || c.bannerSizeId || c.bannerSizeLabel || id.startsWith('custom-banner'))
@@ -295,6 +322,11 @@ export function priceCartLine(raw) {
   }
 
   const kind = detectCustomKind(productId, config)
+  if (kind === 'large-print') {
+    const priced = priceLargePrint(config || {})
+    const unitAmountCents = dollarsToCents(priced.unitDollars)
+    return { productId, name: priced.lineName, description: priced.description, quantity, unitAmountCents, amountCents: unitAmountCents, custom: priced.custom }
+  }
   if (kind === 'photo-freshie') {
     const priced = pricePhotoFreshie(config || {})
     const unitAmountCents = dollarsToCents(priced.unitDollars)
@@ -460,7 +492,8 @@ export function priceCart(items) {
     line.custom?.type === 'canvas' ||
     (line.catalogId && catalogProductById(line.catalogId)?.category?.toLowerCase() === 'canvas'),
   )
-  const shippingCents = shippingCentsForSubtotal(subtotalCents, hasCanvas)
+  const hasLargePrint = lines.some((line) => line.custom?.type === 'large-print')
+  const shippingCents = shippingCentsForSubtotal(subtotalCents, hasCanvas, hasLargePrint)
   return {
     lines,
     subtotalCents,

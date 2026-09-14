@@ -170,8 +170,9 @@ export default function Checkout() {
   const quoteEstimate = quoteItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
   const regularSubtotal = regularItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
   const hasCanvas = regularItems.some(({ product }) => product.category.toLowerCase() === 'canvas')
-  const shippingEstimate = regularItems.length ? shippingDollarsForSubtotal(regularSubtotal, hasCanvas) : 0
-  const freeShip = regularItems.length > 0 && !hasCanvas && isFreeShipping(regularSubtotal)
+  const hasLargePrint = regularItems.some(({ product }) => product.custom?.type === 'large-print')
+  const shippingEstimate = regularItems.length ? shippingDollarsForSubtotal(regularSubtotal, hasCanvas, hasLargePrint) : 0
+  const freeShip = regularItems.length > 0 && !hasCanvas && !hasLargePrint && isFreeShipping(regularSubtotal)
   const grandTotal = regularSubtotal + shippingEstimate
 
   const successFlag = searchParams.get('success') === '1'
@@ -744,8 +745,8 @@ export default function Checkout() {
             </span>
           </div>}
           {regularItems.length > 0 && <p className="text-[11px] text-mute">
-            {hasCanvas
-              ? '$15 shipping for carts with canvas'
+            {hasCanvas || hasLargePrint
+              ? '$15 shipping for carts with canvas or large custom prints'
               : freeShip
               ? `Free shipping on orders $${FREE_SHIPPING_THRESHOLD}+`
               : `Flat $8 shipping · free on $${FREE_SHIPPING_THRESHOLD}+`}
