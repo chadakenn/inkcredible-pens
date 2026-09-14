@@ -156,6 +156,8 @@ export default function Checkout() {
   const [city, setCity] = useState('')
   const [state, setState] = useState('')
   const [zip, setZip] = useState('')
+  const [phone, setPhone] = useState('')
+  const [fulfillment, setFulfillment] = useState<'shipping' | 'pickup'>('shipping')
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
   const [canceledBanner, setCanceledBanner] = useState(false)
@@ -171,7 +173,7 @@ export default function Checkout() {
   const regularSubtotal = regularItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
   const hasCanvas = regularItems.some(({ product }) => product.category.toLowerCase() === 'canvas')
   const hasLargePrint = regularItems.some(({ product }) => product.custom?.type === 'large-print')
-  const shippingEstimate = regularItems.length ? shippingDollarsForSubtotal(regularSubtotal, hasCanvas, hasLargePrint) : 0
+  const shippingEstimate = fulfillment === 'pickup' ? 0 : regularItems.length ? shippingDollarsForSubtotal(regularSubtotal, hasCanvas, hasLargePrint) : 0
   const freeShip = regularItems.length > 0 && !hasCanvas && !hasLargePrint && isFreeShipping(regularSubtotal)
   const grandTotal = regularSubtotal + shippingEstimate
 
@@ -302,7 +304,9 @@ export default function Checkout() {
         address: address.trim(),
         city: city.trim(),
         state: state.trim(),
-        zip: zip.trim(),
+        zip: fulfillment === 'pickup' ? '' : zip.trim(),
+        phone: phone.trim(),
+        fulfillment,
       },
       items: items.map(({ product, qty }) => ({
         name: product.name,
@@ -323,8 +327,7 @@ export default function Checkout() {
       !fullName.trim() ||
       !address.trim() ||
       !city.trim() ||
-      !state.trim() ||
-      !zip.trim()
+      (fulfillment === 'shipping' && (!address.trim() || !city.trim() || !state.trim() || !zip.trim()))
     ) {
       setPayError('Demo order needs full contact + shipping filled in.')
       return
@@ -372,6 +375,8 @@ export default function Checkout() {
             city: city.trim(),
             state: state.trim(),
             zip: zip.trim(),
+            phone: phone.trim(),
+            fulfillment,
             cartSnapshot,
           }),
         )
@@ -388,6 +393,8 @@ export default function Checkout() {
           city: city.trim(),
           state: state.trim(),
           zip: zip.trim(),
+          phone: phone.trim(),
+          fulfillment,
           returnOrigin: window.location.origin,
           items: items.map(({ product, qty }) => ({
             productId: product.id,
@@ -431,7 +438,7 @@ export default function Checkout() {
       const response = await fetch('/api/quotes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer: { email: email.trim(), name: fullName.trim(), address: address.trim(), city: city.trim(), state: state.trim(), zip: zip.trim() },
+          customer: { email: email.trim(), name: fullName.trim(), address: fulfillment === 'pickup' ? 'Local pickup — Findlay, Ohio' : address.trim(), city: fulfillment === 'pickup' ? 'Findlay' : city.trim(), state: fulfillment === 'pickup' ? 'OH' : state.trim(), zip: fulfillment === 'pickup' ? '' : zip.trim(), phone: phone.trim(), fulfillment },
           items: quoteItems.map(({ product, qty }) => ({ name: product.name, qty, estimate: product.price, custom: sanitizeCustomMeta(product.custom) })),
         }),
       })
@@ -546,6 +553,19 @@ export default function Checkout() {
           </fieldset>
 
           <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
+            <legend className="px-1 font-display text-lg">Delivery</legend>
+            <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${fulfillment === 'shipping' ? 'border-cyan bg-cyan/10' : 'border-line bg-ink'}`}>
+              <input type="radio" name="fulfillment" value="shipping" checked={fulfillment === 'shipping'} onChange={() => setFulfillment('shipping')} className="mt-1 accent-cyan" />
+              <span><strong className="block text-cream">Ship my order</strong><span className="text-xs text-mute">Shipping is calculated below.</span></span>
+            </label>
+            <label className={`flex cursor-pointer gap-3 rounded-xl border p-4 ${fulfillment === 'pickup' ? 'border-lime bg-lime/10' : 'border-line bg-ink'}`}>
+              <input type="radio" name="fulfillment" value="pickup" checked={fulfillment === 'pickup'} onChange={() => setFulfillment('pickup')} className="mt-1 accent-lime" />
+              <span><strong className="block text-cream">Free local pickup</strong><span className="text-xs text-mute">Findlay, Ohio · We’ll email or text when it’s ready.</span></span>
+            </label>
+            {fulfillment === 'pickup' && <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone for pickup text (optional)" autoComplete="tel" className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-lime" />}
+          </fieldset>
+
+          {fulfillment === 'shipping' && <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
             <legend className="px-1 font-display text-lg">Shipping address {hasQuoteItems ? '(optional for now)' : '(optional prefill)'}</legend>
             <p className="text-xs text-mute">
               {hasQuoteItems ? 'You can add it now, or confirm it later when you pay the approved quote.' : 'You will confirm your shipping address on Stripe Checkout — that finalized address is what we use for the paid order. Fields here are optional prefill only.'}
@@ -584,7 +604,7 @@ export default function Checkout() {
                 className="w-full rounded-xl border border-line bg-ink px-4 py-3 text-sm outline-none focus:border-cyan"
               />
             </div>
-          </fieldset>
+          </fieldset>}
 
           {!hasQuoteItems && <fieldset className="space-y-3 rounded-2xl border border-line bg-ink-2 p-5">
             <legend className="px-1 font-display text-lg">Payment</legend>
@@ -735,7 +755,7 @@ export default function Checkout() {
           {hasQuoteItems && <div className="flex items-center justify-between"><span className="text-mute">Custom quote estimate</span><span className="font-bold text-lavender">~${quoteEstimate.toFixed(2)}</span></div>}
           {regularItems.length > 0 && <div className="flex items-center justify-between"><span className="text-mute">Regular products</span><span className="font-bold">${regularSubtotal.toFixed(2)}</span></div>}
           {regularItems.length > 0 && <div className="flex items-center justify-between gap-3">
-            <span className="text-mute">Shipping</span>
+            <span className="text-mute">{fulfillment === 'pickup' ? 'Local pickup' : 'Shipping'}</span>
             <span className="text-right font-bold text-cream">
               {freeShip ? (
                 <span className="text-lime">$0.00 · free</span>
@@ -745,7 +765,9 @@ export default function Checkout() {
             </span>
           </div>}
           {regularItems.length > 0 && <p className="text-[11px] text-mute">
-            {hasCanvas || hasLargePrint
+            {fulfillment === 'pickup'
+              ? 'Free pickup in Findlay, Ohio · we’ll email or text when ready'
+              : hasCanvas || hasLargePrint
               ? '$15 shipping for carts with canvas or large custom prints'
               : freeShip
               ? `Free shipping on orders $${FREE_SHIPPING_THRESHOLD}+`

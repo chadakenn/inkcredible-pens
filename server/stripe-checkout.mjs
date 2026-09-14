@@ -355,6 +355,8 @@ function customerFromStripeSession(session, fallback) {
     city: String(addr?.city || fb.city || ''),
     state: String(addr?.state || fb.state || ''),
     zip: String(addr?.postal_code || fb.zip || ''),
+    phone: String(details?.phone || fb.phone || ''),
+    fulfillment: String(fb.fulfillment || 'shipping'),
   }
 }
 
@@ -430,6 +432,7 @@ function fulfillCheckoutSession(session) {
     total,
     shippingCents: pending.shippingCents,
     subtotalCents: pending.subtotalCents,
+    fulfillment: pending.fulfillment || pending.customer?.fulfillment || 'shipping',
     status: 'new',
     paid: true,
   })
@@ -507,6 +510,8 @@ app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res)
     city,
     state,
     zip,
+    phone,
+    fulfillment,
     items,
     returnOrigin,
   } = req.body ?? {}
@@ -529,20 +534,23 @@ app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res)
 
   let priced
   try {
-    priced = priceCart(items)
+    priced = priceCart(items, fulfillment === 'pickup')
   } catch (err) {
     console.error('[stripe-checkout] priceCart', err)
     const code = err?.code || 'pricing_failed'
     return res.status(400).json({ error: code, message: err instanceof Error ? err.message : code })
   }
 
+  const localPickup = fulfillment === 'pickup'
   const customer = {
     email: String(email),
     name: String(fullName || ''),
-    address: String(address || ''),
-    city: String(city || ''),
-    state: String(state || ''),
-    zip: String(zip || ''),
+    address: localPickup ? 'Local pickup — Findlay, Ohio' : String(address || ''),
+    city: localPickup ? 'Findlay' : String(city || ''),
+    state: localPickup ? 'OH' : String(state || ''),
+    zip: localPickup ? '' : String(zip || ''),
+    phone: String(phone || ''),
+    fulfillment: localPickup ? 'pickup' : 'shipping',
   }
 
   const checkoutId = newCheckoutId()
@@ -554,6 +562,7 @@ app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res)
     subtotalCents: priced.subtotalCents,
     shippingCents: priced.shippingCents,
     totalCents: priced.totalCents,
+    fulfillment: customer.fulfillment,
   })
 
   try {
@@ -581,20 +590,16 @@ app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res)
       customer_email: customer.email,
       client_reference_id: checkoutId,
       line_items,
-      shipping_address_collection: { allowed_countries: ['US'] },
-      shipping_options: [
-        {
+      ...(localPickup ? {} : {
+        shipping_address_collection: { allowed_countries: ['US'] },
+        shipping_options: [{
           shipping_rate_data: {
             type: 'fixed_amount',
-            fixed_amount: {
-              amount: priced.shippingCents,
-              currency: 'usd',
-            },
-            display_name:
-              priced.shippingCents === 0 ? 'Free shipping' : 'Standard shipping',
+            fixed_amount: { amount: priced.shippingCents, currency: 'usd' },
+            display_name: priced.shippingCents === 0 ? 'Free shipping' : 'Standard shipping',
           },
-        },
-      ],
+        }],
+      }),
       success_url: `${origin}/checkout?success=1&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/checkout?canceled=1`,
       metadata: {
@@ -603,6 +608,7 @@ app.post('/api/create-checkout-session', checkoutCreateLimiter, async (req, res)
         fullName: truncateMeta(customer.name),
         shippingCents: String(priced.shippingCents),
         subtotalCents: String(priced.subtotalCents),
+        fulfillment: customer.fulfillment,
       },
     })
 

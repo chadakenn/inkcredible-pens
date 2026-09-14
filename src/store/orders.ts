@@ -29,6 +29,8 @@ export interface OrderCustomer {
   city: string
   state: string
   zip: string
+  phone?: string
+  fulfillment?: 'shipping' | 'pickup'
 }
 
 export interface OrderItemSnapshot {
@@ -50,6 +52,7 @@ export interface Order {
   paid?: boolean
   stripeSessionId?: string
   shippingCents?: number
+  fulfillment?: 'shipping' | 'pickup'
   trackingCarrier?: string
   trackingNumber?: string
   shippedAt?: string

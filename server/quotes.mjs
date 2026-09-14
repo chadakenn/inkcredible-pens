@@ -61,7 +61,7 @@ export function mountQuotes(app, { createPaymentSession }) {
       const quote = {
         id: `quote-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         displayCode: quoteCode(), createdAt: new Date().toISOString(), status: 'requested',
-        customer: { email, name, address: clean(body.customer?.address, 240), city: clean(body.customer?.city, 100), state: clean(body.customer?.state, 40), zip: clean(body.customer?.zip, 20) },
+        customer: { email, name, address: clean(body.customer?.address, 240), city: clean(body.customer?.city, 100), state: clean(body.customer?.state, 40), zip: clean(body.customer?.zip, 20), phone: clean(body.customer?.phone, 40), fulfillment: body.customer?.fulfillment === 'pickup' ? 'pickup' : 'shipping' },
         items,
         estimateTotal: items.reduce((sum, item) => sum + item.estimate * item.qty, 0),
       }

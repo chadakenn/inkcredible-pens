@@ -316,7 +316,7 @@ function OrderCard({
           <div className="rounded-2xl border border-line bg-ink p-4 text-sm">
             <p className="text-xs font-extrabold uppercase tracking-wider text-mute">Customer</p>
             <p className="mt-1 font-bold text-cream">{order.customer.name}</p>
-            <p className="text-mute">{order.customer.email}</p>
+            <p className="text-mute">{order.customer.email}</p>{order.customer.phone && <p className="text-mute">{order.customer.phone}</p>}{order.fulfillment === 'pickup' || order.customer.fulfillment === 'pickup' ? <p className="mt-2 font-extrabold text-lime">FREE LOCAL PICKUP · FINDLAY, OHIO</p> : null}
             <p className="mt-2 text-mute">
               {order.customer.address}
               <br />

@@ -479,7 +479,7 @@ export function priceCartLine(raw) {
 /**
  * Price a full cart. Returns priced lines + shipping + totals.
  */
-export function priceCart(items) {
+export function priceCart(items, localPickup = false) {
   if (!Array.isArray(items) || items.length === 0) {
     throw Object.assign(new Error('empty_cart'), { code: 'empty_cart' })
   }
@@ -493,7 +493,7 @@ export function priceCart(items) {
     (line.catalogId && catalogProductById(line.catalogId)?.category?.toLowerCase() === 'canvas'),
   )
   const hasLargePrint = lines.some((line) => line.custom?.type === 'large-print')
-  const shippingCents = shippingCentsForSubtotal(subtotalCents, hasCanvas, hasLargePrint)
+  const shippingCents = localPickup ? 0 : shippingCentsForSubtotal(subtotalCents, hasCanvas, hasLargePrint)
   return {
     lines,
     subtotalCents,

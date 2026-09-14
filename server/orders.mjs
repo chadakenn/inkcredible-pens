@@ -76,6 +76,8 @@ function normalizeCustomer(raw) {
     city: String(c.city || ''),
     state: String(c.state || ''),
     zip: String(c.zip || ''),
+    phone: String(c.phone || ''),
+    fulfillment: c.fulfillment === 'pickup' ? 'pickup' : 'shipping',
   }
 }
 
@@ -163,6 +165,7 @@ export function createPaidOrder(input) {
   }
   if (input.paid === true) order.paid = true
   if (stripeSessionId) order.stripeSessionId = stripeSessionId
+  if (input.fulfillment === 'pickup') order.fulfillment = 'pickup'
   if (input.shippingCents != null && Number.isFinite(Number(input.shippingCents))) {
     order.shippingCents = Math.round(Number(input.shippingCents))
   }
