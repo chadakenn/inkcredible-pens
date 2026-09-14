@@ -24,9 +24,12 @@ export default function CartDrawer() {
 
   const total = subtotal()
   const count = totalCount()
-  const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - total)
-  const progress = Math.min(100, (total / FREE_SHIPPING_THRESHOLD) * 100)
-  const unlocked = remaining === 0 && total > 0
+  const standardSubtotal = items.filter(({ product }) => product.custom?.estimateOnly !== true)
+    .reduce((sum, { product, qty }) => sum + product.price * qty, 0)
+  const hasCanvas = items.some(({ product }) => product.custom?.estimateOnly !== true && product.category.toLowerCase() === 'canvas')
+  const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - standardSubtotal)
+  const progress = Math.min(100, (standardSubtotal / FREE_SHIPPING_THRESHOLD) * 100)
+  const unlocked = !hasCanvas && remaining === 0 && standardSubtotal > 0
 
   const keepShopping = () => {
     closeCart()
@@ -70,7 +73,9 @@ export default function CartDrawer() {
         <div className="border-b border-line px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2 text-xs font-bold">
             <Truck className={`h-3.5 w-3.5 ${unlocked ? 'text-lime' : 'text-cyan'}`} />
-            {unlocked ? (
+            {hasCanvas ? (
+              <span className="text-mute">Canvas shipping: $15 for this cart.</span>
+            ) : unlocked ? (
               <span className="text-lime">Free shipping unlocked — you legend.</span>
             ) : (
               <span className="text-mute">
@@ -87,7 +92,7 @@ export default function CartDrawer() {
             />
           </div>
           <p className="mt-1.5 text-[11px] text-mute">
-            Free shipping on orders ${FREE_SHIPPING_THRESHOLD.toFixed(0)}+ · otherwise $8
+            {hasCanvas ? 'Canvas shipping applies even above $60.' : `Free shipping on orders $${FREE_SHIPPING_THRESHOLD.toFixed(0)}+ · otherwise $8`}
           </p>
         </div>
 

@@ -118,7 +118,7 @@ export default function Hero() {
                 <Mail className="h-4 w-4 text-cyan" /> Custom studio
               </Link>
             </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1 text-xs font-bold text-mute"><span className="inline-flex items-center gap-1.5"><Truck className="h-4 w-4 text-lime" /> Free shipping over $60</span><span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-pink" /> Made to order in Ohio</span></div>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 pt-1 text-xs font-bold text-mute"><span className="inline-flex items-center gap-1.5"><Truck className="h-4 w-4 text-lime" /> Free shipping over $60 (excludes canvas)</span><span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-pink" /> Made to order in Ohio</span></div>
           </div>
 
           <div

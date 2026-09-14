@@ -11,9 +11,11 @@ const CATALOG_FILE = path.resolve(__dirname, '../data/catalog/products.json')
 const CATALOG_SEED = path.join(__dirname, 'catalog-seed.json')
 
 export const FLAT_SHIPPING_CENTS = 800
+export const CANVAS_SHIPPING_CENTS = 1500
 export const FREE_SHIPPING_THRESHOLD_CENTS = 6000
 
-export function shippingCentsForSubtotal(subtotalCents) {
+export function shippingCentsForSubtotal(subtotalCents, hasCanvas = false) {
+  if (hasCanvas) return CANVAS_SHIPPING_CENTS
   const cents = Math.max(0, Math.round(Number(subtotalCents) || 0))
   return cents >= FREE_SHIPPING_THRESHOLD_CENTS ? 0 : FLAT_SHIPPING_CENTS
 }
@@ -454,7 +456,11 @@ export function priceCart(items) {
     (sum, line) => sum + line.unitAmountCents * line.quantity,
     0,
   )
-  const shippingCents = shippingCentsForSubtotal(subtotalCents)
+  const hasCanvas = lines.some((line) =>
+    line.custom?.type === 'canvas' ||
+    (line.catalogId && catalogProductById(line.catalogId)?.category?.toLowerCase() === 'canvas'),
+  )
+  const shippingCents = shippingCentsForSubtotal(subtotalCents, hasCanvas)
   return {
     lines,
     subtotalCents,

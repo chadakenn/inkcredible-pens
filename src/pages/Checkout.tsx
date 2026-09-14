@@ -169,8 +169,9 @@ export default function Checkout() {
   const mixedQuoteCart = hasQuoteItems && regularItems.length > 0
   const quoteEstimate = quoteItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
   const regularSubtotal = regularItems.reduce((sum, { product, qty }) => sum + product.price * qty, 0)
-  const shippingEstimate = regularItems.length ? shippingDollarsForSubtotal(regularSubtotal) : 0
-  const freeShip = regularItems.length > 0 && isFreeShipping(regularSubtotal)
+  const hasCanvas = regularItems.some(({ product }) => product.category.toLowerCase() === 'canvas')
+  const shippingEstimate = regularItems.length ? shippingDollarsForSubtotal(regularSubtotal, hasCanvas) : 0
+  const freeShip = regularItems.length > 0 && !hasCanvas && isFreeShipping(regularSubtotal)
   const grandTotal = regularSubtotal + shippingEstimate
 
   const successFlag = searchParams.get('success') === '1'
@@ -743,7 +744,9 @@ export default function Checkout() {
             </span>
           </div>}
           {regularItems.length > 0 && <p className="text-[11px] text-mute">
-            {freeShip
+            {hasCanvas
+              ? '$15 shipping for carts with canvas'
+              : freeShip
               ? `Free shipping on orders $${FREE_SHIPPING_THRESHOLD}+`
               : `Flat $8 shipping · free on $${FREE_SHIPPING_THRESHOLD}+`}
           </p>}

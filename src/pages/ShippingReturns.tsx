@@ -24,8 +24,8 @@ export default function ShippingReturns() {
           <Truck className="h-7 w-7 text-cyan" />
           <h2 className="mt-3 font-display text-2xl text-cream">Shipping</h2>
           <ul className="mt-4 space-y-3 text-sm leading-relaxed text-mute">
-            <li><strong className="text-cream">United States:</strong> $8 flat-rate standard shipping.</li>
-            <li><strong className="text-cream">Free shipping:</strong> Merchandise orders of $60 or more.</li>
+            <li><strong className="text-cream">United States:</strong> $8 flat-rate standard shipping; $15 for carts with canvas.</li>
+            <li><strong className="text-cream">Free shipping:</strong> Orders of $60 or more without canvas. Canvas shipping applies even above $60.</li>
             <li><strong className="text-cream">Tracking:</strong> We email tracking information when your order ships.</li>
           </ul>
         </article>

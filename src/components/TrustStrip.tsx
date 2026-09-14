@@ -18,7 +18,7 @@ const values = [
   {
     Icon: Truck,
     title: 'Free over $60',
-    blurb: 'Standard shipping is free when your order tops $60.',
+    blurb: 'Standard shipping is free over $60; canvas ships for $15.',
     accent: 'text-cyan',
     ring: 'border-cyan/30 bg-cyan/10',
   },
