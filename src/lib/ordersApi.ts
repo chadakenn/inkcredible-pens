@@ -80,6 +80,9 @@ export interface PatchOrderBody {
   shippedAt?: string | null
   archivedAt?: string | null
   productionNotes?: string
+  pickupInstructions?: string
+  pickupReadyAt?: string
+  pickupPickedUpAt?: string
 }
 
 export async function requestOrderProof(id: string, message: string): Promise<{ order: Order; proofUrl: string }> {

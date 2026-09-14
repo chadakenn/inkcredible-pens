@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const ORDERS_DIR = path.resolve(__dirname, '../data/orders')
 export const ORDERS_FILE = path.join(ORDERS_DIR, 'orders.json')
 
-const STATUSES = new Set(['new', 'making', 'ready', 'shipped', 'cancelled'])
+const STATUSES = new Set(['new', 'making', 'ready', 'picked_up', 'shipped', 'cancelled'])
 const LEGACY_STATUS = { in_progress: 'making', done: 'shipped' }
 
 mkdirSync(ORDERS_DIR, { recursive: true })
@@ -272,8 +272,11 @@ export function mountOrders(app) {
     const hasShippedAt = Object.prototype.hasOwnProperty.call(body, 'shippedAt')
     const hasArchivedAt = Object.prototype.hasOwnProperty.call(body, 'archivedAt')
     const hasProductionNotes = Object.prototype.hasOwnProperty.call(body, 'productionNotes')
+    const hasPickupInstructions = Object.prototype.hasOwnProperty.call(body, 'pickupInstructions')
+    const hasPickupReadyAt = Object.prototype.hasOwnProperty.call(body, 'pickupReadyAt')
+    const hasPickupPickedUpAt = Object.prototype.hasOwnProperty.call(body, 'pickupPickedUpAt')
 
-    if (!hasStatus && !hasCarrier && !hasNumber && !hasShippedAt && !hasArchivedAt && !hasProductionNotes) {
+    if (!hasStatus && !hasCarrier && !hasNumber && !hasShippedAt && !hasArchivedAt && !hasProductionNotes && !hasPickupInstructions && !hasPickupReadyAt && !hasPickupPickedUpAt) {
       return res.status(400).json({ error: 'no_updates' })
     }
 
@@ -298,6 +301,9 @@ export function mountOrders(app) {
       next.status = body.status
       if (body.status === 'shipped' && !next.shippedAt && !hasShippedAt) {
         next.shippedAt = new Date().toISOString()
+      }
+      if (body.status === 'picked_up' && !next.pickupPickedUpAt && !hasPickupPickedUpAt) {
+        next.pickupPickedUpAt = new Date().toISOString()
       }
     }
 
@@ -345,6 +351,19 @@ export function mountOrders(app) {
         return res.status(400).json({ error: 'invalid_production_notes' })
       }
       next.productionNotes = body.productionNotes.trim()
+    }
+
+    if (hasPickupInstructions) {
+      if (typeof body.pickupInstructions !== 'string' || body.pickupInstructions.length > 1000) return res.status(400).json({ error: 'invalid_pickup_instructions' })
+      next.pickupInstructions = body.pickupInstructions.trim()
+    }
+    if (hasPickupReadyAt) {
+      if (typeof body.pickupReadyAt !== 'string' || !Number.isFinite(Date.parse(body.pickupReadyAt))) return res.status(400).json({ error: 'invalid_pickup_ready_at' })
+      next.pickupReadyAt = body.pickupReadyAt
+    }
+    if (hasPickupPickedUpAt) {
+      if (typeof body.pickupPickedUpAt !== 'string' || !Number.isFinite(Date.parse(body.pickupPickedUpAt))) return res.status(400).json({ error: 'invalid_pickup_picked_up_at' })
+      next.pickupPickedUpAt = body.pickupPickedUpAt
     }
 
     orders[idx] = next

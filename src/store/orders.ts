@@ -11,7 +11,7 @@ import {
   type OrdersSyncState,
 } from '../lib/ordersApi'
 
-export type OrderStatus = 'new' | 'making' | 'ready' | 'shipped' | 'cancelled'
+export type OrderStatus = 'new' | 'making' | 'ready' | 'picked_up' | 'shipped' | 'cancelled'
 
 export type TrackingStatus =
   | 'unknown'
@@ -62,6 +62,9 @@ export interface Order {
   deliveredAt?: string
   archivedAt?: string
   productionNotes?: string
+  pickupInstructions?: string
+  pickupReadyAt?: string
+  pickupPickedUpAt?: string
   proofToken?: string
   proofStatus?: 'pending' | 'approved'
   proofRequestedAt?: string
@@ -375,6 +378,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   new: 'New',
   making: 'Making',
   ready: 'Ready',
+  picked_up: 'Picked up',
   shipped: 'Shipped',
   cancelled: 'Cancelled',
 }

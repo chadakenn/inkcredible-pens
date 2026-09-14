@@ -28,6 +28,7 @@ const STATUS_BTNS: { id: OrderStatus; className: string }[] = [
   { id: 'new', className: 'bg-cyan text-ink' },
   { id: 'making', className: 'bg-lavender text-ink' },
   { id: 'ready', className: 'bg-amber-300 text-ink' },
+  { id: 'picked_up', className: 'bg-lime text-ink' },
   { id: 'shipped', className: 'bg-lime text-ink' },
   { id: 'cancelled', className: 'bg-pink text-white' },
 ]
@@ -248,8 +249,12 @@ function OrderCard({
   const [productionNotes, setProductionNotes] = useState(order.productionNotes || '')
   const [proofMessage, setProofMessage] = useState(order.proofMessage || '')
   const [workflowBusy, setWorkflowBusy] = useState(false)
+  const [pickupInstructions, setPickupInstructions] = useState(order.pickupInstructions || '')
+  const isPickup = order.fulfillment === 'pickup' || order.customer.fulfillment === 'pickup'
+  const pickupText = `Hi ${order.customer.name || ''}! Your Inkcredible order ${order.displayCode || order.id} is ready for pickup in Findlay, Ohio.${pickupInstructions.trim() ? ` ${pickupInstructions.trim()}` : ''}`
+  const pickupSmsHref = order.customer.phone ? `sms:${order.customer.phone}?body=${encodeURIComponent(pickupText)}` : ''
   const itemCount = order.items.reduce((total, item) => total + item.qty, 0)
-  const statusBorder = order.status === 'new' ? 'border-l-cyan' : order.status === 'making' ? 'border-l-lavender' : order.status === 'ready' ? 'border-l-amber-300' : order.status === 'shipped' ? 'border-l-lime' : 'border-l-pink'
+  const statusBorder = order.status === 'new' ? 'border-l-cyan' : order.status === 'making' ? 'border-l-lavender' : order.status === 'ready' ? 'border-l-amber-300' : order.status === 'picked_up' ? 'border-l-lime' : order.status === 'shipped' ? 'border-l-lime' : 'border-l-pink'
 
   const printPackingSlip = () => {
     const popup = window.open('', '_blank', 'width=900,height=760')
@@ -620,16 +625,41 @@ function OrderCard({
             )}
           </div>
 
+          {isPickup && <div className="rounded-2xl border border-lime/35 bg-lime/10 p-4">
+            <p className="font-display text-lg text-cream">Local pickup</p>
+            <p className="mt-1 text-xs text-mute">These private instructions are included in the ready-for-pickup email and optional text.</p>
+            <textarea value={pickupInstructions} onChange={(event) => setPickupInstructions(event.target.value)} rows={3} maxLength={1000} placeholder="Pickup address, available times, or call/text when arriving…" className="mt-3 w-full rounded-xl border border-line bg-ink px-3 py-2 text-sm text-cream outline-none focus:border-lime" />
+            {order.status === 'ready' && <div className="mt-3 flex flex-wrap gap-2">{order.customer.phone && <a href={pickupSmsHref} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-cyan px-4 text-sm font-extrabold text-ink">Text customer</a>}<button type="button" disabled={workflowBusy} onClick={() => { setWorkflowBusy(true); setTrackingMsg(null); void patchOrder(order.id, { status: 'ready', pickupInstructions, pickupReadyAt: new Date().toISOString() }).then((updated) => { patchLocalOrder(updated); setTrackingMsg('Pickup-ready email queued again.') }).catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not resend pickup email')).finally(() => setWorkflowBusy(false)) }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-lime/50 px-4 text-sm font-extrabold text-lime"><Send className="h-4 w-4" /> Resend ready email</button></div>}
+          </div>}
+
           <div>
             <p className="mb-2 text-xs font-extrabold uppercase tracking-wider text-mute">
               Order progress
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {STATUS_BTNS.map((btn) => (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {STATUS_BTNS.filter((btn) => btn.id !== 'picked_up' || isPickup).map((btn) => (
                 <button
                   key={btn.id}
                   type="button"
                   onClick={() => {
+                    if (btn.id === 'ready' && isPickup) {
+                      setTrackingSaving(true)
+                      setTrackingMsg(null)
+                      void patchOrder(order.id, { status: 'ready', pickupInstructions, pickupReadyAt: new Date().toISOString() })
+                        .then((updated) => { patchLocalOrder(updated); setTrackingMsg('Marked ready — customer email queued') })
+                        .catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not mark ready'))
+                        .finally(() => setTrackingSaving(false))
+                      return
+                    }
+                    if (btn.id === 'picked_up' && isPickup) {
+                      setTrackingSaving(true)
+                      setTrackingMsg(null)
+                      void patchOrder(order.id, { status: 'picked_up', pickupPickedUpAt: new Date().toISOString() })
+                        .then((updated) => { patchLocalOrder(updated); setTrackingMsg('Order marked picked up') })
+                        .catch((error) => setTrackingMsg(error instanceof Error ? error.message : 'Could not mark picked up'))
+                        .finally(() => setTrackingSaving(false))
+                      return
+                    }
                     if (btn.id === 'shipped') {
                       if (!trackingNumber.trim()) {
                         setTrackingMsg('Add a tracking number before marking this shipped.')
@@ -750,6 +780,7 @@ export default function OrdersPanel() {
       new: active.filter((order) => order.status === 'new').length,
       making: active.filter((order) => order.status === 'making').length,
       ready: active.filter((order) => order.status === 'ready').length,
+      picked_up: active.filter((order) => order.status === 'picked_up').length,
       shipped: active.filter((order) => order.status === 'shipped').length,
       cancelled: active.filter((order) => order.status === 'cancelled').length,
       proof: active.filter((order) => order.proofStatus === 'pending').length,
@@ -887,6 +918,7 @@ export default function OrdersPanel() {
             ['new', 'New', workflowCounts.new, 'text-cyan'],
             ['making', 'Making', workflowCounts.making, 'text-lavender'],
             ['ready', 'Ready', workflowCounts.ready, 'text-amber-200'],
+            ['picked_up', 'Picked up', workflowCounts.picked_up, 'text-lime'],
             ['shipped', 'Shipped', workflowCounts.shipped, 'text-lime'],
             ['cancelled', 'Cancelled', workflowCounts.cancelled, 'text-pink'],
           ] as const).map(([id, label, count, color]) => <button key={id} type="button" onClick={() => { setStatusFilter(id); setExpandedId(null) }} className={`min-h-24 rounded-xl border p-3 text-left transition ${statusFilter === id ? 'border-cyan bg-cyan/10 shadow-lg shadow-cyan/10' : 'border-line bg-ink-2 hover:border-cyan/40'}`}><p className={`font-display text-3xl ${color}`}>{count}</p><p className="mt-1 text-xs font-extrabold uppercase tracking-wide text-mute">{label}</p></button>)}

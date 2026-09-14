@@ -222,6 +222,19 @@ function shipmentMessage(order) {
   }
 }
 
+
+function pickupReadyMessage(order) {
+  const customer = order.customer && typeof order.customer === 'object' ? order.customer : {}
+  const code = orderCode(order)
+  const firstName = clean(customer.name, 80).split(' ')[0]
+  const instructions = clean(order.pickupInstructions, 1000)
+  return {
+    subject: `Your Inkcredible order is ready for pickup • ${code}`,
+    html: `<!doctype html><html><body style="margin:0;background:#09090b;color:#f6f6f7;font-family:Arial,sans-serif"><div style="max-width:680px;margin:auto;padding:32px 18px"><div style="border-top:4px solid #c9ff37;background:#121216;border-radius:16px;padding:28px"><div style="font-size:12px;letter-spacing:2px;color:#26d9ff;font-weight:700">INKCREDIBLE PENS</div><h1>Your order is ready for pickup 🎉</h1><p>${firstName ? `Hey ${esc(firstName)}, your` : 'Your'} order <strong>${esc(code)}</strong> is ready for local pickup in Findlay, Ohio.</p>${instructions ? `<div style="background:#0d0d10;border:1px solid #2b2b31;border-radius:12px;padding:16px;margin:20px 0;white-space:pre-line"><strong>Pickup instructions</strong><br>${esc(instructions)}</div>` : ''}<p style="color:#aaaab3">Reply to this email if you need to arrange a pickup time. If you later request shipping, the shipping charge must be paid before the order can be mailed.</p></div></div></body></html>`,
+    text: `INKCREDIBLE PENS\n\n${firstName ? `Hey ${firstName}, your` : 'Your'} order ${code} is ready for local pickup in Findlay, Ohio.${instructions ? `\n\nPICKUP INSTRUCTIONS\n${instructions}` : ''}\n\nReply to this email if you need to arrange a pickup time. If you request shipping, the shipping charge must be paid first.`,
+  }
+}
+
 function proofApprovalMessage(order) {
   const customer = order.customer && typeof order.customer === 'object' ? order.customer : {}
   const code = orderCode(order)
@@ -403,6 +416,10 @@ async function runOnce() {
         }
       }
       await attempt(state, order, 'customer', String(order.customer?.email || '').trim(), customerMessage)
+      if (order.fulfillment === 'pickup' && order.status === 'ready' && order.pickupReadyAt) {
+        const readyKey = `pickup_ready_${String(order.pickupReadyAt).replace(/[^0-9]/g, '')}`
+        await attempt(state, order, readyKey, String(order.customer?.email || '').trim(), pickupReadyMessage)
+      }
       if (order.status === 'shipped' && order.trackingNumber) {
         await attempt(state, order, 'shipment', String(order.customer?.email || '').trim(), shipmentMessage)
       }
