@@ -47,6 +47,7 @@ const PAGE_META = new Map([
 
 const CUSTOM_META = new Map([
   ['logo-stickers', ['Custom Logo Stickers | Inkcredible', 'Upload your logo and order custom stickers made for your business.']],
+  ['vehicle-decals', ['Large Vehicle Decals | Inkcredible Graphics', 'Request a free quote for custom car, truck, trailer, and window decals. Upload artwork and specify your size.']],
   ['banners', ['Custom Banners | Inkcredible', 'Create a custom banner for your business, event, or celebration.']],
   ['canvas', ['Custom Canvas Prints | Inkcredible', 'Upload a photo and create a custom canvas print.']],
   ['business-cards', ['Custom Business Cards | Inkcredible', 'Order custom business cards designed and printed by Inkcredible.']],

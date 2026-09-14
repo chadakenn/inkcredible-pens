@@ -20,6 +20,7 @@ const Favorites = lazy(() => import('./pages/Favorites'))
 const Admin = lazy(() => import('./pages/Admin'))
 const AdminOrders = lazy(() => import('./pages/AdminOrders'))
 const CustomLogoStickers = lazy(() => import('./pages/CustomLogoStickers'))
+const CustomVehicleDecals = lazy(() => import('./pages/CustomVehicleDecals'))
 const CustomBanners = lazy(() => import('./pages/CustomBanners'))
 const CustomCanvas = lazy(() => import('./pages/CustomCanvas'))
 const CustomBusinessCards = lazy(() => import('./pages/CustomBusinessCards'))
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="/canvas" element={<CategoryPage category="Canvas" />} />
           <Route path="/custom" element={<CategoryPage category="Custom" />} />
           <Route path="/custom/logo-stickers" element={<CustomLogoStickers />} />
+          <Route path="/custom/vehicle-decals" element={<CustomVehicleDecals />} />
           <Route path="/custom/banners" element={<CustomBanners />} />
           <Route path="/custom/canvas" element={<CustomCanvas />} />
           <Route path="/custom/business-cards" element={<CustomBusinessCards />} />

@@ -11,6 +11,7 @@ import {
   CreditCard,
   Heart,
   Camera,
+  CarFront,
 } from 'lucide-react'
 import type { Category, Product } from '../data/products'
 import { STICKER_CATEGORIES, stickerCategories, stickerHasNoCussWords, type StickerCategory } from '../data/stickerCategories'
@@ -70,6 +71,19 @@ function nameStartsWithLetter(name: string, letter: string): boolean {
 }
 
 const studioCards = [
+  {
+    to: '/custom/vehicle-decals',
+    title: 'Large vehicle decals',
+    blurb: 'Door logos, window lettering, and big custom graphics for your ride — request a free quote.',
+    label: 'Free quote',
+    labelClass: 'text-cyan',
+    border: 'border-cyan/40 hover:border-cyan/70',
+    glow: 'shadow-[0_0_40px_rgba(34,211,238,0.12)]',
+    bar: 'from-cyan to-lime',
+    bg: 'to-cyan/10',
+    btn: 'bg-cyan text-ink',
+    Icon: CarFront,
+  },
   {
     to: '/custom/photo-freshie',
     title: 'Photo freshie',
